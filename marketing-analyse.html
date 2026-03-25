@@ -33,7 +33,7 @@
 
     const emptyData = () => ({
       interneAnalyse: {
-        organisatie: { labelType: '', geschiedenis: '', teamleden: [], werking: '' },
+        organisatie: { labelType: '', geschiedenis: '', teamleden: [], werking: '', orgGaps: [] },
         merkidentiteit: { visuelIdentiteit: '', toneOfVoice: '', consistentieBranding: '', waardenMissie: '', huidigePositionering: '' },
         kanaalstrategie: { actievePlatformen: '', onderbouwingPerPlatform: '', primairKanaal: '', ontbrekendeKanalen: '' },
         doelgroep: { wieVolgt: '', leeftijdInteresses: '', gedrag: '', engagement: '', communityInteractie: '', gewensteDoelgroep: '', werkelijkeDoelgroep: '' },
@@ -127,8 +127,12 @@
           samenwerkingen: { ...base.externeAnalyse.samenwerkingen, ...(ext.samenwerkingen || {}) },
         },
       };
-      if (raw.personas) result.personas = raw.personas;
-      if (raw.aiSwot)   result.aiSwot   = raw.aiSwot;
+      if (raw.personas)             result.personas     = raw.personas;
+      if (raw.aiSwot)               result.aiSwot       = raw.aiSwot;
+      if (raw.parentId)             result.parentId     = raw.parentId;
+      if (raw.versieNummer != null) result.versieNummer = raw.versieNummer;
+      if (raw.klantnaam)            result.klantnaam    = raw.klantnaam;
+      if (raw.sector)               result.sector       = raw.sector;
       return result;
     }
 
@@ -215,6 +219,26 @@
       if (volgers > 0 && (likes + comments) > 0)
         return (((likes + comments) / volgers) * 100).toFixed(2) + '%';
       return '';
+    }
+
+    function computeHealthScore(analysis) {
+      const ca  = analysis?.interneAnalyse?.contentanalyse || {};
+      const int = analysis?.interneAnalyse || {};
+      const communityPct = computeCommunityScore(int.communityAnalyse || {});
+      const erNum        = parseEngagementRate(getEngagementRate(ca));
+      const mixKeys = ['contentmixPromo','contentmixBehindScenes','contentmixCommunity','contentmixStorytelling','contentmixEvents','contentmixMemes'];
+      const counts  = mixKeys.map(k => Number(ca[k]) || 0);
+      const total   = counts.reduce((a, b) => a + b, 0);
+      const maxMixPct = total > 0 ? Math.max(...counts.map(c => (c / total) * 100)) : 0;
+      const gewenst   = (int.doelgroep?.gewensteDoelgroep  || '').trim();
+      const werkelijk = (int.doelgroep?.werkelijkeDoelgroep || '').trim();
+      const mismatch  = gewenst && werkelijk && gewenst.toLowerCase() !== werkelijk.toLowerCase();
+      const commFactor  = communityPct >= 70 ? 'pos' : communityPct >= 40 ? 'neu' : 'neg';
+      const erFactor    = erNum === null ? 'neu' : erNum >= 5 ? 'pos' : erNum >= 2 ? 'neu' : 'neg';
+      const mixFactor   = total === 0 ? 'neu' : maxMixPct <= 50 ? 'pos' : maxMixPct <= 60 ? 'neu' : 'neg';
+      const kloofFactor = mismatch ? 'neg' : 'pos';
+      const positieven  = [commFactor, erFactor, mixFactor, kloofFactor].filter(f => f === 'pos').length;
+      return { letter: ['F','D','C','B','A'][positieven], positieven, communityPct, erNum };
     }
 
     // ─── Anthropic API ────────────────────────────────────────────────────────
@@ -1657,7 +1681,7 @@ ${parts.join('\n')}</body></html>`;
     }
 
     // ─── Dashboard sub-pages ──────────────────────────────────────────────────
-    function PageOrganisatie({ data }) {
+    function PageOrganisatie({ data, analysis, apiKey, onUpdate }) {
       return (
         <div className="fade-in space-y-3">
           <div className="flex items-baseline gap-2 mb-1">
@@ -1671,6 +1695,9 @@ ${parts.join('\n')}</body></html>`;
           <DCard title="Team structuur">
             <OrgChart teamleden={data.teamleden} team={data.team} rollen={data.rollenManagement} werking={data.werking} />
           </DCard>
+          {analysis && onUpdate && (
+            <OrgGapsSection analysis={analysis} apiKey={apiKey} onUpdate={onUpdate} />
+          )}
         </div>
       );
     }
@@ -3214,7 +3241,7 @@ ${parts.join('\n')}</body></html>`;
       const renderInternePage = () => {
         const pi = (id) => insights.filter(i => i.pages.includes(id));
         switch (interneTab) {
-          case 'organisatie':     return <PageOrganisatie data={int.organisatie} />;
+          case 'organisatie':     return <PageOrganisatie data={int.organisatie} analysis={analysis} apiKey={apiKey} onUpdate={onUpdate} />;
           case 'merkidentiteit':  return <PageMerkidentiteit data={int.merkidentiteit} insights={pi('merkidentiteit')} />;
           case 'kanaalstrategie': return <PageKanaalstrategie data={int.kanaalstrategie || {}} insights={pi('kanaalstrategie')} />;
           case 'doelgroep':       return <PageDoelgroep data={int.doelgroep} insights={pi('doelgroep')} />;
@@ -3876,6 +3903,357 @@ ${parts.join('\n')}</body></html>`;
       );
     }
 
+    // ─── Version history helpers ──────────────────────────────────────────────
+    function groupAnalysesByFamily(analyses) {
+      // Returns array of family objects: { root, versions[] }
+      // Root = analyses without parentId (or whose parentId doesn't match any analysis)
+      const ids = new Set(analyses.map(a => a.id));
+      const roots = analyses.filter(a => !a.parentId || !ids.has(a.parentId));
+      return roots.map(root => {
+        const versions = analyses
+          .filter(a => a.parentId === root.id)
+          .sort((a, b) => (a.versieNummer || 0) - (b.versieNummer || 0));
+        return { root, versions };
+      });
+    }
+
+    function buildComparePrompt(vA, vB) {
+      const label = a => `${a.klantnaam || 'Analyse'} (${a.versieNummer != null ? 'V' + a.versieNummer : 'origineel'}, ${formatDate(a.datum)})`;
+      const sections = (a) => {
+        const int = a.interneAnalyse || {};
+        const ext = a.externeAnalyse || {};
+        return [
+          `Merkidentiteit — waardenMissie: ${int.merkidentiteit?.waardenMissie || '—'}`,
+          `Merkidentiteit — huidigePositionering: ${int.merkidentiteit?.huidigePositionering || '—'}`,
+          `Community score: ${computeCommunityScore(int.communityAnalyse || {})}%`,
+          `Engagement rate: ${getEngagementRate(int.contentanalyse || '') || '—'}`,
+          `SWOT strengths: ${int.swot?.strengths || '—'}`,
+          `SWOT weaknesses: ${int.swot?.weaknesses || '—'}`,
+          `SWOT opportunities: ${int.swot?.opportunities || '—'}`,
+          `SWOT threats: ${int.swot?.threats || '—'}`,
+          `Kanalen: ${int.kanaalstrategie?.actievePlatformen || '—'}`,
+          `Doelgroep gewenst: ${int.doelgroep?.gewensteDoelgroep || '—'}`,
+          `Doelgroep werkelijk: ${int.doelgroep?.werkelijkeDoelgroep || '—'}`,
+          `Markt: ${ext.marktSceneAnalyse?.grootteScene || '—'}`,
+        ].join('\n');
+      };
+      return `Je bent een marketingstrateeg. Vergelijk twee versies van een marketing analyse en geef maximaal 5 bullet points terug.\n\nVersie A: ${label(vA)}\n${sections(vA)}\n\nVersie B: ${label(vB)}\n${sections(vB)}\n\nGeef als JSON:\n{"bullets": [{"type":"verbeterd|verslechterd|nieuw","tekst":"..."}]}\nType: "verbeterd" (↑), "verslechterd" (↓), "nieuw" (→). Max 5 bullets.`;
+    }
+
+    function buildOrgGapsPrompt(analysis) {
+      const int = analysis.interneAnalyse || {};
+      const org = int.organisatie || {};
+      const teamleden = (org.teamleden || []).map(m => `${m.functietitel || m.rol || 'Onbekend'}${m.rol && m.functietitel ? ' (' + m.rol + ')' : ''}`).join(', ') || '—';
+      const mk = int.merkidentiteit || {};
+      const swot = int.swot || {};
+      return `Je bent een organisatieadviseur voor marketingteams. Analyseer de teamstructuur en geef concrete organisatiegaps terug.\n\nSector: ${analysis.sector || '—'}\nKlantnaam: ${analysis.klantnaam || '—'}\nTeamleden/rollen: ${teamleden}\nGewenste doelgroep: ${int.doelgroep?.gewensteDoelgroep || '—'}\nMissie/waarden: ${mk.waardenMissie || '—'}\nHuidige positionering: ${mk.huidigePositionering || '—'}\nSWOT weaknesses: ${swot.weaknesses || '—'}\nSWOT opportunities: ${swot.opportunities || '—'}\n\nGeef als JSON array (max 5 items):\n[{"functie":"Ontbrekende functie","uitleg":"Impact op de organisatie","aanbeveling":"Voltijds|Deeltijds|Freelance|Uitbesteden","prioriteit":"urgent|belangrijk|optioneel"}]`;
+    }
+
+    // ─── SimpleLineChart ───────────────────────────────────────────────────────
+    function SimpleLineChart({ series, versionLabels }) {
+      const W = 520, H = 180, PAD = { top: 20, right: 20, bottom: 30, left: 36 };
+      const iW = W - PAD.left - PAD.right;
+      const iH = H - PAD.top - PAD.bottom;
+      const n = versionLabels.length;
+      if (n < 2) return null;
+      const xPos = (i) => PAD.left + (i / (n - 1)) * iW;
+
+      return (
+        <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ maxHeight: 180 }}>
+          {series.map(({ label, values, color }) => {
+            const vals = values.map(v => (v == null ? null : Number(v)));
+            const defined = vals.filter(v => v != null);
+            if (!defined.length) return null;
+            const minV = Math.min(...defined);
+            const maxV = Math.max(...defined);
+            const range = maxV - minV || 1;
+            const yPos = (v) => PAD.top + iH - ((v - minV) / range) * iH;
+            const points = vals.map((v, i) => v == null ? null : [xPos(i), yPos(v)]);
+            let d = '';
+            points.forEach((p, i) => {
+              if (!p) return;
+              const prev = points.slice(0, i).reverse().find(Boolean);
+              d += prev ? ` L${p[0]},${p[1]}` : `M${p[0]},${p[1]}`;
+            });
+            return (
+              <g key={label}>
+                <path d={d} fill="none" stroke={color} strokeWidth="2" strokeLinejoin="round" />
+                {points.map((p, i) => p && (
+                  <circle key={i} cx={p[0]} cy={p[1]} r={3} fill={color} />
+                ))}
+              </g>
+            );
+          })}
+          {versionLabels.map((lbl, i) => (
+            <text key={i} x={xPos(i)} y={H - 4} textAnchor="middle" fontSize="10" fill="#9ca3af">{lbl}</text>
+          ))}
+          {series.map(({ label, color }, i) => (
+            <g key={label} transform={`translate(${PAD.left + i * 130}, 10)`}>
+              <line x1="0" y1="5" x2="12" y2="5" stroke={color} strokeWidth="2" />
+              <text x="16" y="9" fontSize="10" fill="#6b7280">{label}</text>
+            </g>
+          ))}
+        </svg>
+      );
+    }
+
+    // ─── OrgGapsSection ────────────────────────────────────────────────────────
+    function OrgGapsSection({ analysis, apiKey, onUpdate }) {
+      const [loading, setLoading] = useState(false);
+      const [error, setError] = useState('');
+      const gaps = analysis?.interneAnalyse?.organisatie?.orgGaps || [];
+
+      const priorityStyle = {
+        urgent: { bg: 'bg-red-50', border: 'border-red-200', text: 'text-red-700', badge: 'bg-red-100 text-red-700' },
+        belangrijk: { bg: 'bg-amber-50', border: 'border-amber-200', text: 'text-amber-700', badge: 'bg-amber-100 text-amber-700' },
+        optioneel: { bg: 'bg-blue-50', border: 'border-blue-200', text: 'text-blue-700', badge: 'bg-blue-100 text-blue-700' },
+      };
+
+      const handleGenerate = async () => {
+        if (!apiKey) { setError('Voer eerst een API-sleutel in via de instellingen.'); return; }
+        setLoading(true); setError('');
+        try {
+          const prompt = buildOrgGapsPrompt(analysis);
+          const text = await callAnthropicAPI(apiKey, [{ role: 'user', content: prompt }], 1200);
+          const m = text.match(/\[[\s\S]*\]/);
+          if (!m) throw new Error('Geen geldige JSON ontvangen.');
+          const newGaps = JSON.parse(m[0]);
+          const updated = {
+            ...analysis,
+            interneAnalyse: {
+              ...analysis.interneAnalyse,
+              organisatie: {
+                ...analysis.interneAnalyse.organisatie,
+                orgGaps: newGaps,
+              },
+            },
+          };
+          onUpdate(updated);
+        } catch (e) {
+          setError(e.message || 'Onbekende fout.');
+        } finally {
+          setLoading(false);
+        }
+      };
+
+      return (
+        <div className="mt-4">
+          <div className="flex items-center justify-between mb-2">
+            <h5 className="text-sm font-semibold text-gray-700">🔍 Organisatiegaps — AI analyse</h5>
+            <button
+              onClick={handleGenerate}
+              disabled={loading}
+              className="inline-flex items-center gap-1.5 text-xs font-medium bg-violet-600 text-white px-3 py-1.5 rounded-lg hover:bg-violet-700 disabled:opacity-50 transition-colors"
+            >
+              {loading ? (
+                <><svg className="animate-spin w-3 h-3" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" strokeDasharray="31.4" strokeDashoffset="10" /></svg>Analyseren…</>
+              ) : (
+                <>{gaps.length > 0 ? '↺ Vernieuw' : '✦ Analyseer gaps'}</>
+              )}
+            </button>
+          </div>
+          {error && <p className="text-xs text-red-500 mb-2">{error}</p>}
+          {gaps.length === 0 && !loading && (
+            <p className="text-xs text-gray-400 italic">Klik op "Analyseer gaps" om ontbrekende rollen en functies te identificeren op basis van je teamdata en doelstellingen.</p>
+          )}
+          {gaps.length > 0 && (
+            <div className="space-y-2">
+              {gaps.map((gap, i) => {
+                const s = priorityStyle[gap.prioriteit] || priorityStyle.optioneel;
+                return (
+                  <div key={i} className={`rounded-xl border p-3 ${s.bg} ${s.border}`}>
+                    <div className="flex items-start justify-between gap-2 mb-1">
+                      <p className={`text-sm font-semibold ${s.text}`}>{gap.functie}</p>
+                      <div className="flex gap-1 shrink-0">
+                        <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full ${s.badge}`}>{gap.prioriteit}</span>
+                        <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-600">{gap.aanbeveling}</span>
+                      </div>
+                    </div>
+                    <p className="text-xs text-gray-600">{gap.uitleg}</p>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    // ─── EvolutieAnalyseModal ──────────────────────────────────────────────────
+    function EvolutieAnalyseModal({ analyses, onSelect, onClose }) {
+      // Show only root analyses (no parentId) as base for evolution
+      const roots = analyses.filter(a => !a.parentId);
+      return (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4" onClick={onClose}>
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-base font-semibold text-gray-900">Evolutie-analyse starten</h3>
+              <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl leading-none">×</button>
+            </div>
+            <p className="text-sm text-gray-500 mb-4">Kies een bestaande analyse als basis voor een nieuwe versie.</p>
+            {roots.length === 0 ? (
+              <p className="text-sm text-gray-400 italic">Geen analyses beschikbaar.</p>
+            ) : (
+              <div className="space-y-2">
+                {roots.map(a => (
+                  <button
+                    key={a.id}
+                    onClick={() => onSelect(a)}
+                    className="w-full text-left bg-gray-50 hover:bg-violet-50 border border-gray-200 hover:border-violet-300 rounded-xl px-4 py-3 transition-colors"
+                  >
+                    <p className="text-sm font-medium text-gray-900">{a.klantnaam || 'Naamloos'}</p>
+                    <p className="text-xs text-gray-400 mt-0.5">{formatDate(a.datum)}</p>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    // ─── CompareScreen ─────────────────────────────────────────────────────────
+    function CompareScreen({ family, apiKey, onBack, onOpenVersion }) {
+      const allVersions = [family.root, ...family.versions];
+      const [selA, setSelA] = useState(family.root.id);
+      const [selB, setSelB] = useState(family.versions[0]?.id || family.root.id);
+      const [bullets, setBullets] = useState([]);
+      const [loadingAI, setLoadingAI] = useState(false);
+      const [aiError, setAiError] = useState('');
+
+      const vA = allVersions.find(v => v.id === selA) || allVersions[0];
+      const vB = allVersions.find(v => v.id === selB) || allVersions[1] || allVersions[0];
+
+      const versionLabel = (v) => v.versieNummer != null ? `V${v.versieNummer}` : 'Orig.';
+
+      const handleAICompare = async () => {
+        if (!apiKey) { setAiError('Voer eerst een API-sleutel in.'); return; }
+        setLoadingAI(true); setAiError('');
+        try {
+          const prompt = buildComparePrompt(vA, vB);
+          const text = await callAnthropicAPI(apiKey, [{ role: 'user', content: prompt }], 800);
+          const m = text.match(/\{[\s\S]*\}/);
+          if (!m) throw new Error('Geen geldige JSON.');
+          setBullets(JSON.parse(m[0]).bullets || []);
+        } catch (e) {
+          setAiError(e.message || 'Fout bij vergelijking.');
+        } finally {
+          setLoadingAI(false);
+        }
+      };
+
+      // Build chart series
+      const chartVersions = allVersions;
+      const chartLabels = chartVersions.map(versionLabel);
+      const series = [
+        { label: 'Community %', color: '#8b5cf6', values: chartVersions.map(v => computeCommunityScore(v.interneAnalyse?.communityAnalyse || {})) },
+        { label: 'ER %', color: '#10b981', values: chartVersions.map(v => parseEngagementRate(getEngagementRate(v.interneAnalyse?.contentanalyse || {}))) },
+        { label: 'Health (pos/4)', color: '#f59e0b', values: chartVersions.map(v => computeHealthScore(v).positieven) },
+      ];
+
+      const typeIcon = { verbeterd: '↑', verslechterd: '↓', nieuw: '→' };
+      const typeColor = { verbeterd: 'text-emerald-600', verslechterd: 'text-red-500', nieuw: 'text-blue-500' };
+
+      // Delta: compare fields between vA and vB
+      const deltaFields = [
+        ['Merkidentiteit — Waarden/Missie', vA.interneAnalyse?.merkidentiteit?.waardenMissie, vB.interneAnalyse?.merkidentiteit?.waardenMissie],
+        ['Positionering', vA.interneAnalyse?.merkidentiteit?.huidigePositionering, vB.interneAnalyse?.merkidentiteit?.huidigePositionering],
+        ['SWOT — Sterktes', vA.interneAnalyse?.swot?.strengths, vB.interneAnalyse?.swot?.strengths],
+        ['SWOT — Zwaktes', vA.interneAnalyse?.swot?.weaknesses, vB.interneAnalyse?.swot?.weaknesses],
+        ['SWOT — Kansen', vA.interneAnalyse?.swot?.opportunities, vB.interneAnalyse?.swot?.opportunities],
+        ['Doelgroep gewenst', vA.interneAnalyse?.doelgroep?.gewensteDoelgroep, vB.interneAnalyse?.doelgroep?.gewensteDoelgroep],
+        ['Kanalen', vA.interneAnalyse?.kanaalstrategie?.actievePlatformen, vB.interneAnalyse?.kanaalstrategie?.actievePlatformen],
+      ].filter(([, a, b]) => (a || '') !== (b || ''));
+
+      return (
+        <div className="min-h-screen bg-gray-50 fade-in">
+          <div className="max-w-2xl mx-auto px-4 py-8">
+            <button onClick={onBack} className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-800 mb-6 transition-colors">
+              <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6" strokeLinecap="round" strokeLinejoin="round"/></svg>
+              Terug
+            </button>
+            <h2 className="text-xl font-bold text-gray-900 mb-1">Versievergelijking</h2>
+            <p className="text-sm text-gray-400 mb-6">{family.root.klantnaam || 'Naamloos'}</p>
+
+            {/* Version selectors */}
+            <div className="flex gap-3 mb-6">
+              {['A','B'].map((lbl, idx) => {
+                const sel = idx === 0 ? selA : selB;
+                const setSel = idx === 0 ? setSelA : setSelB;
+                return (
+                  <div key={lbl} className="flex-1">
+                    <label className="text-xs text-gray-500 mb-1 block">Versie {lbl}</label>
+                    <select value={sel} onChange={e => setSel(e.target.value)} className="w-full text-sm border border-gray-200 rounded-lg px-2 py-1.5 bg-white">
+                      {allVersions.map(v => (
+                        <option key={v.id} value={v.id}>{versionLabel(v)} — {formatDate(v.datum)}</option>
+                      ))}
+                    </select>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Navigate buttons */}
+            <div className="flex gap-2 mb-6">
+              <button onClick={() => onOpenVersion(vA)} className="text-xs bg-white border border-gray-200 text-gray-700 px-3 py-1.5 rounded-lg hover:bg-gray-50 transition-colors">
+                Bekijk {versionLabel(vA)} volledig
+              </button>
+              <button onClick={() => onOpenVersion(vB)} className="text-xs bg-white border border-gray-200 text-gray-700 px-3 py-1.5 rounded-lg hover:bg-gray-50 transition-colors">
+                Bekijk {versionLabel(vB)} volledig
+              </button>
+            </div>
+
+            {/* Line chart */}
+            <div className="bg-white border border-gray-100 rounded-2xl p-4 mb-4">
+              <p className="text-xs font-semibold text-gray-500 mb-3 uppercase tracking-wide">Evolutie over versies</p>
+              <SimpleLineChart series={series} versionLabels={chartLabels} />
+            </div>
+
+            {/* AI comparison */}
+            <div className="bg-white border border-gray-100 rounded-2xl p-4 mb-4">
+              <div className="flex items-center justify-between mb-3">
+                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">AI-samenvatting</p>
+                <button onClick={handleAICompare} disabled={loadingAI} className="text-xs bg-violet-600 text-white px-3 py-1.5 rounded-lg hover:bg-violet-700 disabled:opacity-50 transition-colors">
+                  {loadingAI ? 'Vergelijken…' : bullets.length > 0 ? '↺ Vernieuw' : '✦ Vergelijk'}
+                </button>
+              </div>
+              {aiError && <p className="text-xs text-red-500 mb-2">{aiError}</p>}
+              {bullets.length > 0 ? (
+                <ul className="space-y-1.5">
+                  {bullets.map((b, i) => (
+                    <li key={i} className="flex items-start gap-2 text-sm">
+                      <span className={`font-bold shrink-0 ${typeColor[b.type] || 'text-gray-500'}`}>{typeIcon[b.type] || '•'}</span>
+                      <span className="text-gray-700">{b.tekst}</span>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-xs text-gray-400 italic">Klik op "Vergelijk" voor een AI-samenvatting van de verschillen.</p>
+              )}
+            </div>
+
+            {/* Delta view */}
+            {deltaFields.length > 0 && (
+              <div className="bg-white border border-gray-100 rounded-2xl p-4">
+                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Gewijzigde velden</p>
+                <div className="space-y-3">
+                  {deltaFields.map(([name, a, b]) => (
+                    <div key={name}>
+                      <p className="text-xs font-medium text-gray-600 mb-1">{name}</p>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div className="text-xs bg-red-50 border border-red-100 rounded-lg p-2 text-red-700">{a || <em className="opacity-50">leeg</em>}</div>
+                        <div className="text-xs bg-emerald-50 border border-emerald-100 rounded-lg p-2 text-emerald-700">{b || <em className="opacity-50">leeg</em>}</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      );
+    }
+
     // ─── Opening Screen ───────────────────────────────────────────────────────
     OpeningScreen.propTypes = {
       analyses: PropTypes.arrayOf(PropTypes.object).isRequired,
@@ -3884,10 +4262,14 @@ ${parts.join('\n')}</body></html>`;
       onOpen: PropTypes.func.isRequired,
       onDelete: PropTypes.func.isRequired,
       onExport: PropTypes.func.isRequired,
+      onEvolutie: PropTypes.func.isRequired,
+      onCompare: PropTypes.func.isRequired,
     };
 
-    function OpeningScreen({ analyses, onNew, onImport, onOpen, onDelete, onExport }) {
+    function OpeningScreen({ analyses, onNew, onImport, onOpen, onDelete, onExport, onEvolutie, onCompare }) {
       const fileRef = useRef();
+      const [expandedFamilies, setExpandedFamilies] = useState({});
+
       const handleFileChange = (e) => {
         const file = e.target.files[0];
         if (!file) return;
@@ -3901,6 +4283,11 @@ ${parts.join('\n')}</body></html>`;
         e.target.value = '';
       };
 
+      const families = groupAnalysesByFamily(analyses);
+      const healthLetterColor = { A: 'text-emerald-600', B: 'text-emerald-500', C: 'text-amber-500', D: 'text-orange-500', F: 'text-red-500' };
+
+      const toggleFamily = (id) => setExpandedFamilies(prev => ({ ...prev, [id]: !prev[id] }));
+
       return (
         <div className="min-h-screen bg-gray-50 fade-in">
           <div className="max-w-2xl mx-auto px-4 py-12">
@@ -3908,12 +4295,18 @@ ${parts.join('\n')}</body></html>`;
               <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Marketing Analyse</h1>
               <p className="text-sm text-gray-400 mt-1">Opgeslagen analyses</p>
             </div>
-            <div className="flex gap-3 mb-8">
+            <div className="flex flex-wrap gap-2 mb-8">
               <button onClick={onNew} className="inline-flex items-center gap-2 bg-gray-900 text-white text-sm font-medium px-4 py-2.5 rounded-lg hover:bg-gray-700 transition-colors">
                 <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
                   <path d="M12 5v14M5 12h14" strokeLinecap="round"/>
                 </svg>
                 Nieuwe analyse
+              </button>
+              <button onClick={onEvolutie} className="inline-flex items-center gap-2 bg-violet-600 text-white text-sm font-medium px-4 py-2.5 rounded-lg hover:bg-violet-700 transition-colors">
+                <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                  <path d="M12 20V4M5 11l7-7 7 7" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+                Evolutie-analyse
               </button>
               <button onClick={() => fileRef.current.click()} className="inline-flex items-center gap-2 bg-white border border-gray-200 text-gray-700 text-sm font-medium px-4 py-2.5 rounded-lg hover:bg-gray-50 transition-colors">
                 <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
@@ -3935,39 +4328,94 @@ ${parts.join('\n')}</body></html>`;
               </div>
             ) : (
               <div className="space-y-2">
-                {analyses.map(a => (
-                  <div
-                    key={a.id}
-                    onClick={() => onOpen(a)}
-                    onKeyDown={e => (e.key === 'Enter' || e.key === ' ') && onOpen(a)}
-                    role="button"
-                    tabIndex={0}
-                    aria-label={`Open analyse: ${a.klantnaam || 'Naamloos'}`}
-                    className="group bg-white border border-gray-100 rounded-xl px-5 py-4 flex items-center justify-between cursor-pointer hover:border-gray-300 hover:shadow-sm transition-all"
-                  >
-                    <div>
-                      <p className="text-sm font-semibold text-gray-900">{a.klantnaam || 'Naamloos'}</p>
-                      <p className="text-xs text-gray-400 mt-0.5">{formatDate(a.datum)}</p>
-                    </div>
-                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button
-                        onClick={e => { e.stopPropagation(); onExport(a); }}
-                        aria-label={`Exporteer analyse: ${a.klantnaam || 'Naamloos'}`}
-                        className="text-xs text-gray-400 hover:text-gray-700 px-2.5 py-1.5 rounded-md hover:bg-gray-50 transition-colors"
+                {families.map(({ root, versions }) => {
+                  const health = computeHealthScore(root);
+                  const hasVersions = versions.length > 0;
+                  const isExpanded = expandedFamilies[root.id];
+                  return (
+                    <div key={root.id} className="bg-white border border-gray-100 rounded-xl overflow-hidden hover:border-gray-200 transition-all">
+                      {/* Root row */}
+                      <div
+                        onClick={() => onOpen(root)}
+                        onKeyDown={e => (e.key === 'Enter' || e.key === ' ') && onOpen(root)}
+                        role="button"
+                        tabIndex={0}
+                        aria-label={`Open analyse: ${root.klantnaam || 'Naamloos'}`}
+                        className="group px-5 py-4 flex items-center justify-between cursor-pointer hover:bg-gray-50 transition-colors"
                       >
-                        Export
-                      </button>
-                      <button
-                        onClick={e => { e.stopPropagation(); onDelete(a.id); }}
-                        aria-label={`Verwijder analyse: ${a.klantnaam || 'Naamloos'}`}
-                        className="text-xs text-gray-400 hover:text-red-500 px-2.5 py-1.5 rounded-md hover:bg-red-50 transition-colors"
-                      >
-                        Verwijder
-                      </button>
-                      <span className="text-gray-300 ml-1" aria-hidden="true">→</span>
+                        <div className="flex items-center gap-3">
+                          {hasVersions && (
+                            <button
+                              onClick={e => { e.stopPropagation(); toggleFamily(root.id); }}
+                              className="text-gray-300 hover:text-gray-600 transition-colors"
+                              aria-label="Versies tonen"
+                            >
+                              <svg width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{ transform: isExpanded ? 'rotate(90deg)' : 'none', transition: 'transform 0.15s' }}>
+                                <path d="M9 6l6 6-6 6" strokeLinecap="round" strokeLinejoin="round"/>
+                              </svg>
+                            </button>
+                          )}
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <p className="text-sm font-semibold text-gray-900">{root.klantnaam || 'Naamloos'}</p>
+                              <span className={`text-xs font-bold ${healthLetterColor[health.letter] || 'text-gray-400'}`}>{health.letter}</span>
+                              {hasVersions && <span className="text-[10px] text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded-full">{versions.length} versie{versions.length !== 1 ? 's' : ''}</span>}
+                            </div>
+                            <p className="text-xs text-gray-400 mt-0.5">{formatDate(root.datum)}</p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                          {versions.length >= 1 && (
+                            <button
+                              onClick={e => { e.stopPropagation(); onCompare({ root, versions }); }}
+                              className="text-xs text-violet-500 hover:text-violet-700 px-2.5 py-1.5 rounded-md hover:bg-violet-50 transition-colors"
+                            >
+                              Vergelijk
+                            </button>
+                          )}
+                          <button onClick={e => { e.stopPropagation(); onExport(root); }} className="text-xs text-gray-400 hover:text-gray-700 px-2.5 py-1.5 rounded-md hover:bg-gray-50 transition-colors">Export</button>
+                          <button onClick={e => { e.stopPropagation(); onDelete(root.id); }} className="text-xs text-gray-400 hover:text-red-500 px-2.5 py-1.5 rounded-md hover:bg-red-50 transition-colors">Verwijder</button>
+                          <span className="text-gray-300 ml-1" aria-hidden="true">→</span>
+                        </div>
+                      </div>
+
+                      {/* Expanded version list */}
+                      {hasVersions && isExpanded && (
+                        <div className="border-t border-gray-100">
+                          {versions.map(v => {
+                            const vHealth = computeHealthScore(v);
+                            return (
+                              <div
+                                key={v.id}
+                                onClick={() => onOpen(v)}
+                                onKeyDown={e => (e.key === 'Enter' || e.key === ' ') && onOpen(v)}
+                                role="button"
+                                tabIndex={0}
+                                className="group flex items-center justify-between px-5 py-3 bg-gray-50 hover:bg-violet-50 cursor-pointer transition-colors border-t border-gray-100 first:border-t-0"
+                              >
+                                <div className="flex items-center gap-3 pl-4">
+                                  <div className="w-px h-4 bg-gray-300" />
+                                  <div>
+                                    <div className="flex items-center gap-2">
+                                      <p className="text-xs font-medium text-gray-700">V{v.versieNummer}</p>
+                                      <span className={`text-xs font-bold ${healthLetterColor[vHealth.letter] || 'text-gray-400'}`}>{vHealth.letter}</span>
+                                    </div>
+                                    <p className="text-[11px] text-gray-400">{formatDate(v.datum)}</p>
+                                  </div>
+                                </div>
+                                <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                  <button onClick={e => { e.stopPropagation(); onExport(v); }} className="text-xs text-gray-400 hover:text-gray-700 px-2 py-1 rounded hover:bg-gray-100 transition-colors">Export</button>
+                                  <button onClick={e => { e.stopPropagation(); onDelete(v.id); }} className="text-xs text-gray-400 hover:text-red-500 px-2 py-1 rounded hover:bg-red-50 transition-colors">Verwijder</button>
+                                  <span className="text-gray-300 ml-1" aria-hidden="true">→</span>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>
@@ -3977,9 +4425,13 @@ ${parts.join('\n')}</body></html>`;
 
     // ─── App root ─────────────────────────────────────────────────────────────
     function App() {
-      const [screen, setScreen] = useState('home'); // 'home' | 'dashboard' | 'form'
+      const [screen, setScreen] = useState('home'); // 'home' | 'dashboard' | 'form' | 'compare'
       const [viewing, setViewing] = useState(null);
       const [editing, setEditing] = useState(null);
+      const [evolvingFrom, setEvolvingFrom] = useState(null);   // root analysis id when creating evolution
+      const [evolutionPreFill, setEvolutionPreFill] = useState(null); // prefill data for FormScreen
+      const [compareFamily, setCompareFamily] = useState(null); // { root, versions[] }
+      const [showEvolutieModal, setShowEvolutieModal] = useState(false);
       const [apiKey, setApiKeyState] = useState(() => localStorage.getItem('ma_apikey') || '');
       const [analyses, setAnalyses] = useState(() => {
         try { return JSON.parse(localStorage.getItem('ma_analyses') || '[]'); }
@@ -4000,10 +4452,18 @@ ${parts.join('\n')}</body></html>`;
         if (editing) {
           saved = { ...data, id: editing.id, datum: editing.datum };
           persist(analyses.map(a => a.id === editing.id ? saved : a));
+        } else if (evolvingFrom) {
+          // Count existing versions for this family to determine next versieNummer
+          const existingVersions = analyses.filter(a => a.parentId === evolvingFrom);
+          const nextVersie = existingVersions.length + 1;
+          saved = { ...data, id: generateId(), datum: new Date().toISOString(), parentId: evolvingFrom, versieNummer: nextVersie };
+          persist([saved, ...analyses]);
         } else {
           saved = { ...data, id: generateId(), datum: new Date().toISOString() };
           persist([saved, ...analyses]);
         }
+        setEvolvingFrom(null);
+        setEvolutionPreFill(null);
         if (viewing || goToDashboard) {
           setViewing(saved);
           setScreen('dashboard');
@@ -4041,6 +4501,27 @@ ${parts.join('\n')}</body></html>`;
         persist([...newItems, ...analyses]);
       };
 
+      const handleEvolutie = (original) => {
+        // Pre-fill the form with the original's data, but will save as new version
+        setEvolvingFrom(original.id);
+        setEvolutionPreFill(original);
+        setEditing(null);
+        setViewing(null);
+        setShowEvolutieModal(false);
+        setScreen('form');
+      };
+
+      if (screen === 'compare' && compareFamily) {
+        return (
+          <CompareScreen
+            family={compareFamily}
+            apiKey={apiKey}
+            onBack={() => { setCompareFamily(null); setScreen('home'); }}
+            onOpenVersion={(v) => { setViewing(v); setCompareFamily(null); setScreen('dashboard'); }}
+          />
+        );
+      }
+
       if (screen === 'dashboard' && viewing) {
         return (
           <DashboardScreen
@@ -4057,9 +4538,11 @@ ${parts.join('\n')}</body></html>`;
       if (screen === 'form') {
         return (
           <FormScreen
-            initial={editing}
+            initial={editing || evolutionPreFill}
             onSave={handleSave}
             onBack={() => {
+              setEvolvingFrom(null);
+              setEvolutionPreFill(null);
               if (viewing) { setScreen('dashboard'); }
               else { setScreen('home'); setEditing(null); }
             }}
@@ -4068,14 +4551,25 @@ ${parts.join('\n')}</body></html>`;
       }
 
       return (
-        <OpeningScreen
-          analyses={analyses}
-          onNew={() => { setEditing(null); setViewing(null); setScreen('form'); }}
-          onImport={handleImport}
-          onOpen={a => { setViewing(a); setScreen('dashboard'); }}
-          onDelete={handleDelete}
-          onExport={exportAnalysis}
-        />
+        <>
+          <OpeningScreen
+            analyses={analyses}
+            onNew={() => { setEditing(null); setViewing(null); setEvolvingFrom(null); setEvolutionPreFill(null); setScreen('form'); }}
+            onImport={handleImport}
+            onOpen={a => { setViewing(a); setScreen('dashboard'); }}
+            onDelete={handleDelete}
+            onExport={exportAnalysis}
+            onEvolutie={() => setShowEvolutieModal(true)}
+            onCompare={(family) => { setCompareFamily(family); setScreen('compare'); }}
+          />
+          {showEvolutieModal && (
+            <EvolutieAnalyseModal
+              analyses={analyses}
+              onSelect={handleEvolutie}
+              onClose={() => setShowEvolutieModal(false)}
+            />
+          )}
+        </>
       );
     }
 
