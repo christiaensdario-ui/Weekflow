@@ -1,15 +1,35 @@
 # Marketing Analyse App — Savestate
 
 ## Laatste opslag
-**Datum:** 2026-03-24
-**Commit hash:** deb74f0
-**Branch:** `master`
-**Remote:** https://github.com/christiaensdario-ui/marketing-analyse.git
-**Gepushed:** ja — 11 commits naar origin/master
+**Datum:** 2026-03-25
+**Commit hash:** bbcfadf
+**Branch:** `main`
+**Remote:** https://github.com/christiaensdario-ui/Weekflow.git
+**Gepushed:** ja — 2 commits naar origin/main
 
 ---
 
 ## Samenvatting recente wijzigingen
+
+### Sessie 2026-03-25 — marketing-analyse: versiegeschiedenis, organisatiegaps, health score & onboarding (commits 4003615, bbcfadf)
+
+#### Versiegeschiedenis & evolutie-analyse (`4003615`)
+- Analyses kunnen nu `parentId`, `versieNummer`, `klantnaam` en `sector` bevatten
+- `groupAnalysesByFamily()` groepeert analyses per klantfamilie
+- `EvolutieAnalyseModal`: kies bestaande analyse als basis voor nieuwe versie
+- `CompareScreen`: versievergelijking met lijndiagram (community %, ER, health) + AI-samenvatting (↑↓→) + handmatige delta-velden
+- `SimpleLineChart`: SVG-lijndiagram voor evolutie over versies
+- `OrgGapsSection`: AI analyseert ontbrekende rollen/functies, toont per gap prioriteit (urgent/belangrijk/optioneel) en aanbeveling (voltijds/deeltijds/freelance/uitbesteden)
+- `computeHealthScore()`: rapportcijfer A–F op basis van community score, ER, content mix diversiteit en doelgroep-mismatch
+
+#### Onboarding flow (`bbcfadf`)
+- `OnboardingModal` met 5 schermen: Welkom → Wizard → Dashboard → Evolutie → Klaar
+- Voortgangsbalk (filled segments) + stapteller bovenaan modal
+- Automatisch getoond bij eerste bezoek: geen `ma_onboarding_done` in localStorage + geen opgeslagen analyses
+- "Sla over" slaat onboarding als gedaan op; "Start je eerste analyse" opent wizard direct
+- Footer op openingsscherm: "Bekijk rondleiding opnieuw" herstart modal altijd
+
+---
 
 ### Sessie 2026-03-24 — WeekFlow: Netlify deployment
 
@@ -201,12 +221,15 @@ Eerder in dezelfde dag: complete herstart van `WeekFlow/weekflow.html`.
 
 ### marketing-analyse.html — Features actief
 - Multi-client analyse beheer (aanmaken, opslaan, openen, verwijderen)
+- Versiegeschiedenis per klant: evolutie-analyse, versievergelijking met lijndiagram + AI-samenvatting
+- Health score A–F per analyse (community, ER, content mix, doelgroep-mismatch)
 - Export modal: selecteerbare secties (samenvatting, interne/externe/persona's/individueel), PDF of JSON formaat
-- Samenvattingspagina: gezondheidscore A–F, mini-donut contentmix, doelgroep compact, persona snellinks, benchmark ER, marktcontext badges, middelen kaartjes
-- Interne analyse: Organisatie (SVG OrgChart + TeamEditor), Merkidentiteit, Kanalen, Doelgroep, Content, Strategie, Community, Middelen, SWOT
+- Samenvattingspagina: health score, mini-donut contentmix, doelgroep compact, persona snellinks, benchmark ER, marktcontext badges, middelen kaartjes — alles klikbaar naar subpagina's
+- Interne analyse: Organisatie (SVG OrgChart + TeamEditor + AI organisatiegaps), Merkidentiteit, Kanalen, Doelgroep, Content, Strategie, Community, Middelen, SWOT
 - Externe analyse: Concurrentie (radardiagram + vergelijkingstabel), Samenwerkingen, Markt/Scene, Doelgroepgedrag, Trends
 - Persona Creator: 3 standaard + optionele conflictpersona via Anthropic API (4 tabs per kaart)
 - AI SWOT: parallelle analyse naast handmatige SWOT (gestructureerde kaartjes)
+- Onboarding flow: 5-schermen modal voor nieuwe gebruikers + "Bekijk rondleiding opnieuw" in footer
 - LocalStorage persistentie met automatische migratie
 
 ### WeekFlow/weekflow.html — Features actief
