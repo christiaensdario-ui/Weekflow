@@ -36,6 +36,13 @@
         organisatie: { labelType: '', geschiedenis: '', teamleden: [], werking: '', orgGaps: [] },
         merkidentiteit: { visuelIdentiteit: '', toneOfVoice: '', consistentieBranding: '', waardenMissie: '', huidigePositionering: '' },
         kanaalstrategie: { actievePlatformen: '', onderbouwingPerPlatform: '', primairKanaal: '', ontbrekendeKanalen: '' },
+        contentFormats: {
+          actief: ['socialeMedia'],
+          website: { url: '', maandelijksBezoekers: '', bounceRate: '', tijdOpPagina: '', blogpostsPerMaand: '', zoekwoorden: '', sterkstePagina: '', seoScore: '', ctaAanwezig: '' },
+          email: { platform: '', subscribers: '', openRate: '', clickRate: '', verzendfrequentie: '', typeEmails: '', segmentatie: '' },
+          advertenties: { platforms: '', maandelijksBudget: '', costPerClick: '', costPerLead: '', doelstelling: '', remarketing: '' },
+          printOffline: { formats: '', frequentie: '', doelgebied: '', koppelingOnline: '' },
+        },
         doelgroep: { wieVolgt: '', leeftijdInteresses: '', gedrag: '', engagement: '', communityInteractie: '', gewensteDoelgroep: '', werkelijkeDoelgroep: '' },
         contentanalyse: {
           contentmixTotaal: 20,
@@ -119,6 +126,13 @@
           organisatie: { ...base.interneAnalyse.organisatie, ...(int.organisatie || {}), teamleden: Array.isArray(int.organisatie?.teamleden) ? int.organisatie.teamleden.map(m => ({ rapporteertAan: '', ...m })) : [] },
           kanaalstrategie: { ...base.interneAnalyse.kanaalstrategie, ...(int.kanaalstrategie || {}) },
           contentanalyse: migratedCa,
+          contentFormats: {
+            actief: Array.isArray(int.contentFormats?.actief) ? int.contentFormats.actief : ['socialeMedia'],
+            website:      { ...base.interneAnalyse.contentFormats.website,      ...(int.contentFormats?.website      || {}) },
+            email:        { ...base.interneAnalyse.contentFormats.email,        ...(int.contentFormats?.email        || {}) },
+            advertenties: { ...base.interneAnalyse.contentFormats.advertenties, ...(int.contentFormats?.advertenties || {}) },
+            printOffline: { ...base.interneAnalyse.contentFormats.printOffline, ...(int.contentFormats?.printOffline || {}) },
+          },
         },
         externeAnalyse: {
           ...base.externeAnalyse,
@@ -133,6 +147,7 @@
       if (raw.versieNummer != null) result.versieNummer = raw.versieNummer;
       if (raw.klantnaam)            result.klantnaam    = raw.klantnaam;
       if (raw.sector)               result.sector       = raw.sector;
+      result.notities = raw.notities && typeof raw.notities === 'object' ? raw.notities : {};
       return result;
     }
 
@@ -446,22 +461,24 @@ table{width:100%;border-collapse:collapse;font-size:10px;margin:6px 0}td,th{bord
       const compRows = [['Positionering','positionering'],['Branding','branding'],['Content','content'],['Community','community'],['Differentiatie','differentiatie'],['Wat doen zij NIET?','watDoenZijNiet']];
       const compTable = `<table><thead><tr><th></th>${competitors.map((c,i)=>`<th>${escHtml(c.naam||`Concurrent ${i+1}`)}</th>`).join('')}</tr></thead><tbody><tr><td><strong>Posts/week</strong></td>${competitors.map(c=>`<td>${escHtml(compPostsVal(c))}</td>`).join('')}</tr><tr><td><strong>Stories/week</strong></td>${competitors.map(c=>`<td>${escHtml(compStoriesVal(c))}</td>`).join('')}</tr>${compRows.map(([label,key])=>`<tr><td><strong>${label}</strong></td>${competitors.map(c=>`<td>${escHtml(c[key]||'—')}</td>`).join('')}</tr>`).join('')}<tr><td><strong>Engagement (ER)</strong></td>${competitors.map(c=>`<td>${escHtml(compErVal(c))}</td>`).join('')}</tr></tbody></table>`;
       const erVal = (() => { const l=parseFloat(String(ca.gemiddeldeLikes||'').replace(',','.'));const c2=parseFloat(String(ca.gemiddeldeComments||'').replace(',','.'));const s2=parseFloat(String(ca.gemiddeldeShares||'').replace(',','.')); if(ca.insightsAccess==='ja'){const b=parseFloat(String(ca.gemiddeldBereik||'').replace(',','.')); return b>0&&(l+c2+s2)>0?((l+c2+s2)/b*100).toFixed(2)+'%':'';}if(ca.insightsAccess==='nee'){const v=parseFloat(String(ca.aantalVolgers||'').replace(',','.')); return v>0&&(l+c2)>0?((l+c2)/v*100).toFixed(2)+'%':'';}return ''; })();
+      const notes = analysis.notities || {};
+      const pdfNote = (key) => { const n = (notes[key] || '').trim(); return n ? `<div style="margin-top:10px;background:#fefce8;border:1px solid #fde047;border-radius:4px;padding:8px 10px;page-break-inside:avoid"><div style="font-size:9px;font-weight:700;text-transform:uppercase;color:#b45309;letter-spacing:.05em;margin-bottom:3px">Notitie</div><div style="font-size:10px;color:#92400e;line-height:1.5">${escHtml(n).replace(/\n/g,'<br>')}</div></div>` : ''; };
       const sectionHtml = {
         samenvatting: `<h2>Samenvatting</h2>${pdfField('Klantnaam',klantnaam)}${pdfField('Datum analyse',dateStr)}${pdfField('Primair kanaal',int.kanaalstrategie?.primairKanaal)}${pdfField('Engagement rate',erVal)}${pdfField('Gewenste doelgroep',int.doelgroep?.gewensteDoelgroep)}${pdfField('Werkelijke doelgroep',int.doelgroep?.werkelijkeDoelgroep)}${pdfField('Kernwaarden / missie',int.merkidentiteit?.waardenMissie)}`,
-        organisatie: `<h2>A — Organisatie / structuur</h2>${pdfField('Type label / bedrijf',int.organisatie.labelType)}${pdfField('Geschiedenis',int.organisatie.geschiedenis)}${pdfField('Teamleden',Array.isArray(int.organisatie.teamleden)&&int.organisatie.teamleden.length?int.organisatie.teamleden.map(t=>`${t.naam}${t.functietitel?' ('+t.functietitel+')':''}`).join(', '):int.organisatie.team)}${pdfField('Werking',int.organisatie.werking)}`,
-        merkidentiteit: `<h2>B — Merkidentiteit</h2>${pdfField('Visuele identiteit',int.merkidentiteit.visuelIdentiteit)}${pdfField('Tone of voice',int.merkidentiteit.toneOfVoice)}${pdfField('Consistentie van branding',int.merkidentiteit.consistentieBranding)}${pdfField('Waarden en missie',int.merkidentiteit.waardenMissie)}${pdfField('Huidige positionering',int.merkidentiteit.huidigePositionering)}`,
-        kanalen: `<h2>C — Kanaalstrategie</h2>${pdfField('Actieve platformen',int.kanaalstrategie.actievePlatformen)}${pdfField('Onderbouwing per platform',int.kanaalstrategie.onderbouwingPerPlatform)}${pdfField('Primair kanaal',int.kanaalstrategie.primairKanaal)}${pdfField('Ontbrekende kanalen',int.kanaalstrategie.ontbrekendeKanalen)}`,
-        doelgroep: `<h2>D — Doelgroep</h2>${pdfField('Wie volgt het merk nu?',int.doelgroep.wieVolgt)}${pdfField('Leeftijd / interesses',int.doelgroep.leeftijdInteresses)}${pdfField('Gedrag',int.doelgroep.gedrag)}${pdfField('Engagement',int.doelgroep.engagement)}${pdfField('Community interactie',int.doelgroep.communityInteractie)}${pdfField('Gewenste doelgroep',int.doelgroep.gewensteDoelgroep)}${pdfField('Werkelijke doelgroep',int.doelgroep.werkelijkeDoelgroep)}`,
-        content: `<h2>E — Contentanalyse</h2>${pdfField('Posts (4 weken)',ca.frequentiePostsAantal)}${pdfField('Stories (4 weken)',ca.frequentieStoriesAantal)}${pdfField('Gem. likes',ca.gemiddeldeLikes)}${pdfField('Gem. comments',ca.gemiddeldeComments)}${pdfField('Gem. shares',ca.gemiddeldeShares)}${pdfField('Engagement rate',erVal)}${pdfField('Formats — Foto',ca.formatsFoto?.uitleg)}${pdfField('Formats — Video',ca.formatsVideo?.uitleg)}${pdfField('Formats — Reels',ca.formatsReels?.uitleg)}${pdfField('Formats — Carousels',ca.formatsCarousels?.uitleg)}`,
-        strategie: `<h2>G — Strategische contentanalyse</h2>${pdfField('Positioneringsconsistentie',int.strategischeContent.positioneringsconsistentie)}${pdfField('Tone of voice',int.strategischeContent.toneOfVoice)}${pdfField('Storytelling',int.strategischeContent.storytelling)}${pdfField('Emotie',int.strategischeContent.emotie)}${pdfField('Doelgroepresonantie',int.strategischeContent.doelgroepresonantie)}${pdfField('Formatstrategie',int.strategischeContent.formatstrategie)}`,
-        community: `<h2>H — Community analyse</h2>${pdfField('Interactie in comments',int.communityAnalyse.interactieComments)}${pdfField('Terugkerende fans',int.communityAnalyse.terugkerendeFans)}${pdfField('User generated content',int.communityAnalyse.userGeneratedContent)}${pdfField('DM interacties',int.communityAnalyse.dmInteracties)}${pdfField('Community betrokkenheid',int.communityAnalyse.communityBetrokkenheid)}${pdfField('Publiek of echte community?',int.communityAnalyse.publiefOfCommunity)}`,
-        middelen: `<h2>I — Middelen</h2>${pdfField('Budget',int.middelen.budget)}${pdfField('Tijd',int.middelen.tijd)}${pdfField('Team',int.middelen.team)}${pdfField('Netwerk',int.middelen.netwerk)}${pdfField('Skills',int.middelen.skills)}`,
-        swot: `<h2>J — SWOT</h2><div class="grid2"><div class="sc sc-s"><div class="sl">Strengths</div>${escHtml(int.swot.strengths||'—').replace(/\n/g,'<br>')}</div><div class="sc sc-w"><div class="sl">Weaknesses</div>${escHtml(int.swot.weaknesses||'—').replace(/\n/g,'<br>')}</div><div class="sc sc-o"><div class="sl">Opportunities</div>${escHtml(int.swot.opportunities||'—').replace(/\n/g,'<br>')}</div><div class="sc sc-t"><div class="sl">Threats</div>${escHtml(int.swot.threats||'—').replace(/\n/g,'<br>')}</div></div>`,
-        concurrentie: `<h2>A — Concurrentieanalyse</h2>${compTable}`,
-        samenwerkingen: `<h2>B — Samenwerkingen en netwerk</h2>${pdfField('Potentiële partners',ext.samenwerkingen.potentielePartners)}${pdfField('Gatekeepers in de scene',ext.samenwerkingen.gatekeepers)}${pdfField('Bestaande samenwerkingen',ext.samenwerkingen.bestaandeSamenwerkingen)}${pdfField('Ontbrekende samenwerkingen',ext.samenwerkingen.ontbrekendeSamenwerkingen)}`,
-        markt: `<h2>C — Markt / scene analyse</h2>${pdfField('Grootte van de scene',ext.marktSceneAnalyse.grootteScene)}${pdfField('Populariteit van het genre',ext.marktSceneAnalyse.populariteitGenre)}${pdfField('Aantal events',ext.marktSceneAnalyse.aantalEvents)}${pdfField('Andere labels / collectieven',ext.marktSceneAnalyse.andereLabels)}${pdfField('Marktverzadiging',ext.marktSceneAnalyse.marktverzadiging)}`,
-        doelgroepgedrag: `<h2>D — Doelgroepgedrag</h2>${pdfField('Hoe ontdekken ze muziek?',ext.doelgroepgedrag.ontdekkingMuziek)}${pdfField('Welke platformen gebruiken ze?',ext.doelgroepgedrag.platformgebruik)}${pdfField('Wat motiveert hen?',ext.doelgroepgedrag.motivatie)}${pdfField('Wie beïnvloedt hen?',ext.doelgroepgedrag.invloeden)}`,
-        trends: `<h2>E — Culturele trends</h2>${pdfField('Stijgende populariteit van een genre',ext.cultureleTrends.genrePopulariteit)}${pdfField('Nostalgie trends',ext.cultureleTrends.nostalgieTrends)}${pdfField('DIY cultuur',ext.cultureleTrends.diyCultuur)}${pdfField('Authenticiteit vs commercialisering',ext.cultureleTrends.authenticiteitVsCommercialisering)}`,
+        organisatie: `<h2>A — Organisatie / structuur</h2>${pdfField('Type label / bedrijf',int.organisatie.labelType)}${pdfField('Geschiedenis',int.organisatie.geschiedenis)}${pdfField('Teamleden',Array.isArray(int.organisatie.teamleden)&&int.organisatie.teamleden.length?int.organisatie.teamleden.map(t=>`${t.naam}${t.functietitel?' ('+t.functietitel+')':''}`).join(', '):int.organisatie.team)}${pdfField('Werking',int.organisatie.werking)}${pdfNote('organisatie')}`,
+        merkidentiteit: `<h2>B — Merkidentiteit</h2>${pdfField('Visuele identiteit',int.merkidentiteit.visuelIdentiteit)}${pdfField('Tone of voice',int.merkidentiteit.toneOfVoice)}${pdfField('Consistentie van branding',int.merkidentiteit.consistentieBranding)}${pdfField('Waarden en missie',int.merkidentiteit.waardenMissie)}${pdfField('Huidige positionering',int.merkidentiteit.huidigePositionering)}${pdfNote('merkidentiteit')}`,
+        kanalen: `<h2>C — Kanaalstrategie</h2>${pdfField('Actieve platformen',int.kanaalstrategie.actievePlatformen)}${pdfField('Onderbouwing per platform',int.kanaalstrategie.onderbouwingPerPlatform)}${pdfField('Primair kanaal',int.kanaalstrategie.primairKanaal)}${pdfField('Ontbrekende kanalen',int.kanaalstrategie.ontbrekendeKanalen)}${pdfNote('kanalen')}`,
+        doelgroep: `<h2>D — Doelgroep</h2>${pdfField('Wie volgt het merk nu?',int.doelgroep.wieVolgt)}${pdfField('Leeftijd / interesses',int.doelgroep.leeftijdInteresses)}${pdfField('Gedrag',int.doelgroep.gedrag)}${pdfField('Engagement',int.doelgroep.engagement)}${pdfField('Community interactie',int.doelgroep.communityInteractie)}${pdfField('Gewenste doelgroep',int.doelgroep.gewensteDoelgroep)}${pdfField('Werkelijke doelgroep',int.doelgroep.werkelijkeDoelgroep)}${pdfNote('doelgroep')}`,
+        content: `<h2>E — Contentanalyse</h2>${pdfField('Posts (4 weken)',ca.frequentiePostsAantal)}${pdfField('Stories (4 weken)',ca.frequentieStoriesAantal)}${pdfField('Gem. likes',ca.gemiddeldeLikes)}${pdfField('Gem. comments',ca.gemiddeldeComments)}${pdfField('Gem. shares',ca.gemiddeldeShares)}${pdfField('Engagement rate',erVal)}${pdfField('Formats — Foto',ca.formatsFoto?.uitleg)}${pdfField('Formats — Video',ca.formatsVideo?.uitleg)}${pdfField('Formats — Reels',ca.formatsReels?.uitleg)}${pdfField('Formats — Carousels',ca.formatsCarousels?.uitleg)}${pdfNote('content')}`,
+        strategie: `<h2>G — Strategische contentanalyse</h2>${pdfField('Positioneringsconsistentie',int.strategischeContent.positioneringsconsistentie)}${pdfField('Tone of voice',int.strategischeContent.toneOfVoice)}${pdfField('Storytelling',int.strategischeContent.storytelling)}${pdfField('Emotie',int.strategischeContent.emotie)}${pdfField('Doelgroepresonantie',int.strategischeContent.doelgroepresonantie)}${pdfField('Formatstrategie',int.strategischeContent.formatstrategie)}${pdfNote('strategie')}`,
+        community: `<h2>H — Community analyse</h2>${pdfField('Interactie in comments',int.communityAnalyse.interactieComments)}${pdfField('Terugkerende fans',int.communityAnalyse.terugkerendeFans)}${pdfField('User generated content',int.communityAnalyse.userGeneratedContent)}${pdfField('DM interacties',int.communityAnalyse.dmInteracties)}${pdfField('Community betrokkenheid',int.communityAnalyse.communityBetrokkenheid)}${pdfField('Publiek of echte community?',int.communityAnalyse.publiefOfCommunity)}${pdfNote('community')}`,
+        middelen: `<h2>I — Middelen</h2>${pdfField('Budget',int.middelen.budget)}${pdfField('Tijd',int.middelen.tijd)}${pdfField('Team',int.middelen.team)}${pdfField('Netwerk',int.middelen.netwerk)}${pdfField('Skills',int.middelen.skills)}${pdfNote('middelen')}`,
+        swot: `<h2>J — SWOT</h2><div class="grid2"><div class="sc sc-s"><div class="sl">Strengths</div>${escHtml(int.swot.strengths||'—').replace(/\n/g,'<br>')}</div><div class="sc sc-w"><div class="sl">Weaknesses</div>${escHtml(int.swot.weaknesses||'—').replace(/\n/g,'<br>')}</div><div class="sc sc-o"><div class="sl">Opportunities</div>${escHtml(int.swot.opportunities||'—').replace(/\n/g,'<br>')}</div><div class="sc sc-t"><div class="sl">Threats</div>${escHtml(int.swot.threats||'—').replace(/\n/g,'<br>')}</div></div>${pdfNote('swot')}`,
+        concurrentie: `<h2>A — Concurrentieanalyse</h2>${compTable}${pdfNote('concurrentie')}`,
+        samenwerkingen: `<h2>B — Samenwerkingen en netwerk</h2>${pdfField('Potentiële partners',ext.samenwerkingen.potentielePartners)}${pdfField('Gatekeepers in de scene',ext.samenwerkingen.gatekeepers)}${pdfField('Bestaande samenwerkingen',ext.samenwerkingen.bestaandeSamenwerkingen)}${pdfField('Ontbrekende samenwerkingen',ext.samenwerkingen.ontbrekendeSamenwerkingen)}${pdfNote('samenwerkingen')}`,
+        markt: `<h2>C — Markt / scene analyse</h2>${pdfField('Grootte van de scene',ext.marktSceneAnalyse.grootteScene)}${pdfField('Populariteit van het genre',ext.marktSceneAnalyse.populariteitGenre)}${pdfField('Aantal events',ext.marktSceneAnalyse.aantalEvents)}${pdfField('Andere labels / collectieven',ext.marktSceneAnalyse.andereLabels)}${pdfField('Marktverzadiging',ext.marktSceneAnalyse.marktverzadiging)}${pdfNote('markt')}`,
+        doelgroepgedrag: `<h2>D — Doelgroepgedrag</h2>${pdfField('Hoe ontdekken ze muziek?',ext.doelgroepgedrag.ontdekkingMuziek)}${pdfField('Welke platformen gebruiken ze?',ext.doelgroepgedrag.platformgebruik)}${pdfField('Wat motiveert hen?',ext.doelgroepgedrag.motivatie)}${pdfField('Wie beïnvloedt hen?',ext.doelgroepgedrag.invloeden)}${pdfNote('doelgroepgedrag')}`,
+        trends: `<h2>E — Culturele trends</h2>${pdfField('Stijgende populariteit van een genre',ext.cultureleTrends.genrePopulariteit)}${pdfField('Nostalgie trends',ext.cultureleTrends.nostalgieTrends)}${pdfField('DIY cultuur',ext.cultureleTrends.diyCultuur)}${pdfField('Authenticiteit vs commercialisering',ext.cultureleTrends.authenticiteitVsCommercialisering)}${pdfNote('trends')}`,
         personas: (() => {
           const ps = analysis.personas;
           if (!ps) return '<h2>Persona\'s</h2><p style="color:#9ca3af;font-style:italic;font-size:11px">Geen persona\'s gegenereerd.</p>';
@@ -667,6 +684,32 @@ ${parts.join('\n')}</body></html>`;
             id: 'trend-contentmix', type: 'opportunity', icon: '📈', title: 'Groeiende trend onderbenut',
             text: `Groeiende trend gedetecteerd: ${trendNamen} is ondervertegenwoordigd in je contentmix — overweeg dit te benutten.`,
             pages: ['trends','contentanalyse']
+          });
+        }
+      } catch (_) {}
+
+      // ── 10 — Hoge bounce rate op website ─────────────────────────────────────
+      try {
+        const cfActief = int.contentFormats?.actief || [];
+        if (cfActief.includes('website')) {
+          const br = parseFloat(String(int.contentFormats.website.bounceRate || '').replace('%','').replace(',','.'));
+          if (!isNaN(br) && br > 70) insights.push({
+            id: 'website-bounce', type: 'tension', icon: '↩️', title: 'Hoge bounce rate website',
+            text: `Bounce rate van ${br}% is hoog — bezoekers verlaten de site snel. Overweeg betere CTA's en relevantere landingspagina's.`,
+            pages: ['website']
+          });
+        }
+      } catch (_) {}
+
+      // ── 11 — Lage e-mail open rate ────────────────────────────────────────────
+      try {
+        const cfActief = int.contentFormats?.actief || [];
+        if (cfActief.includes('email')) {
+          const or = parseFloat(String(int.contentFormats.email.openRate || '').replace('%','').replace(',','.'));
+          if (!isNaN(or) && or < 20) insights.push({
+            id: 'email-open', type: 'tension', icon: '📧', title: 'Lage e-mail open rate',
+            text: `Open rate van ${or}% ligt onder de benchmark van 20% — werk aan betere onderwerpregels en optimale verzendmomenten.`,
+            pages: ['email']
           });
         }
       } catch (_) {}
@@ -2103,6 +2146,119 @@ ${parts.join('\n')}</body></html>`;
       );
     }
 
+    // ─── Content-format pages ─────────────────────────────────────────────────
+    function PageWebsite({ data }) {
+      if (!data) return null;
+      const seoColor = { hoog: 'text-emerald-600 bg-emerald-50', matig: 'text-amber-600 bg-amber-50', laag: 'text-red-600 bg-red-50' };
+      const jaNeeBadge = (v) => !v ? null : <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${v === 'ja' ? 'text-emerald-600 bg-emerald-50' : 'text-red-600 bg-red-50'}`}>{v}</span>;
+      return (
+        <div className="fade-in space-y-3">
+          <div className="flex items-baseline gap-2 mb-1">
+            <span className="text-xs font-bold text-gray-300 uppercase tracking-widest">W</span>
+            <h4 className="text-sm font-semibold text-gray-800">Website / Blog</h4>
+          </div>
+          <div className="bg-blue-50 rounded-2xl p-3 space-y-2">
+            <IconDataCard icon="🌐" label="URL" value={data.url} />
+            <IconDataCard icon="👥" label="Maandelijks bezoekers" value={data.maandelijksBezoekers} />
+            <IconDataCard icon="↩️" label="Bounce rate" value={data.bounceRate} />
+            <IconDataCard icon="⏱️" label="Gem. tijd op pagina" value={data.tijdOpPagina} />
+            <IconDataCard icon="✍️" label="Blogposts per maand" value={data.blogpostsPerMaand} />
+            <IconDataCard icon="🔍" label="Primaire zoekwoorden" value={data.zoekwoorden} />
+            <IconDataCard icon="⭐" label="Sterkste pagina / blogpost" value={data.sterkstePagina} />
+            {data.seoScore && (
+              <div className="flex items-center gap-2 pt-1">
+                <span className="text-xs text-gray-500">SEO-zichtbaarheid</span>
+                <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${seoColor[data.seoScore] || 'text-gray-500 bg-gray-100'}`}>{data.seoScore}</span>
+              </div>
+            )}
+            {data.ctaAanwezig && (
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-gray-500">CTA aanwezig</span>
+                {jaNeeBadge(data.ctaAanwezig)}
+              </div>
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    function PageEmail({ data }) {
+      if (!data) return null;
+      const jaNeeBadge = (v) => !v ? null : <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${v === 'ja' ? 'text-emerald-600 bg-emerald-50' : 'text-red-600 bg-red-50'}`}>{v}</span>;
+      return (
+        <div className="fade-in space-y-3">
+          <div className="flex items-baseline gap-2 mb-1">
+            <span className="text-xs font-bold text-gray-300 uppercase tracking-widest">EM</span>
+            <h4 className="text-sm font-semibold text-gray-800">E-mailmarketing</h4>
+          </div>
+          <div className="bg-violet-50 rounded-2xl p-3 space-y-2">
+            <IconDataCard icon="📧" label="Platform" value={data.platform} />
+            <IconDataCard icon="👥" label="Subscribers" value={data.subscribers} />
+            <IconDataCard icon="📬" label="Gemiddelde open rate" value={data.openRate} />
+            <IconDataCard icon="🖱️" label="Gemiddelde click rate" value={data.clickRate} />
+            <IconDataCard icon="📅" label="Verzendfrequentie" value={data.verzendfrequentie} />
+            <IconDataCard icon="📝" label="Type e-mails" value={data.typeEmails} />
+            {data.segmentatie && (
+              <div className="flex items-center gap-2 pt-1">
+                <span className="text-xs text-gray-500">Segmentatie aanwezig</span>
+                {jaNeeBadge(data.segmentatie)}
+              </div>
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    function PageAdvertenties({ data }) {
+      if (!data) return null;
+      const jaNeeBadge = (v) => !v ? null : <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${v === 'ja' ? 'text-emerald-600 bg-emerald-50' : 'text-red-600 bg-red-50'}`}>{v}</span>;
+      return (
+        <div className="fade-in space-y-3">
+          <div className="flex items-baseline gap-2 mb-1">
+            <span className="text-xs font-bold text-gray-300 uppercase tracking-widest">Ad</span>
+            <h4 className="text-sm font-semibold text-gray-800">Betaalde Advertenties</h4>
+          </div>
+          <div className="bg-amber-50 rounded-2xl p-3 space-y-2">
+            <IconDataCard icon="📢" label="Platforms" value={data.platforms} />
+            <IconDataCard icon="💰" label="Maandelijks budget" value={data.maandelijksBudget} />
+            <IconDataCard icon="🖱️" label="Gem. cost per click" value={data.costPerClick} />
+            <IconDataCard icon="🎯" label="Gem. cost per lead / conversie" value={data.costPerLead} />
+            <IconDataCard icon="📊" label="Primaire doelstelling" value={data.doelstelling} />
+            {data.remarketing && (
+              <div className="flex items-center gap-2 pt-1">
+                <span className="text-xs text-gray-500">Remarketing actief</span>
+                {jaNeeBadge(data.remarketing)}
+              </div>
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    function PagePrintOffline({ data }) {
+      if (!data) return null;
+      const jaNeeBadge = (v) => !v ? null : <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${v === 'ja' ? 'text-emerald-600 bg-emerald-50' : 'text-red-600 bg-red-50'}`}>{v}</span>;
+      return (
+        <div className="fade-in space-y-3">
+          <div className="flex items-baseline gap-2 mb-1">
+            <span className="text-xs font-bold text-gray-300 uppercase tracking-widest">P</span>
+            <h4 className="text-sm font-semibold text-gray-800">Print / Offline</h4>
+          </div>
+          <div className="bg-slate-50 rounded-2xl p-3 space-y-2">
+            <IconDataCard icon="🖨️" label="Formats" value={data.formats} />
+            <IconDataCard icon="📅" label="Frequentie" value={data.frequentie} />
+            <IconDataCard icon="📍" label="Doelgebied / verspreiding" value={data.doelgebied} />
+            {data.koppelingOnline && (
+              <div className="flex items-center gap-2 pt-1">
+                <span className="text-xs text-gray-500">QR-code / landingspagina aanwezig</span>
+                {jaNeeBadge(data.koppelingOnline)}
+              </div>
+            )}
+          </div>
+        </div>
+      );
+    }
+
     function PageConcurrentie({ data, analysis }) {
       // visualization-expert: mixed text+bar tables make numeric comparisons instantly scannable.
       // Inline bars added for Posts/week, Stories/week and ER rows — these are the only rows
@@ -3238,29 +3394,52 @@ ${parts.join('\n')}</body></html>`;
         window.scrollTo({ top: 0, behavior: 'smooth' });
       };
 
+      const activeFormats = int.contentFormats?.actief || ['socialeMedia'];
+      const FORMAT_EXTRA_TABS = [
+        { id: 'website',      label: 'Website',      letter: 'W'  },
+        { id: 'email',        label: 'E-mail',        letter: 'EM' },
+        { id: 'advertenties', label: 'Advertenties',  letter: 'Ad' },
+        { id: 'printOffline', label: 'Print/Offline', letter: 'P'  },
+      ];
+      const interneTabs = [
+        ...INTERNE_TABS,
+        ...FORMAT_EXTRA_TABS.filter(t => activeFormats.includes(t.id)),
+      ];
+
+      const withNote = (key, el) => (
+        <React.Fragment>
+          {el}
+          <NotitieBadge sectieKey={key} analysis={analysis} onUpdate={onUpdate} />
+        </React.Fragment>
+      );
+
       const renderInternePage = () => {
         const pi = (id) => insights.filter(i => i.pages.includes(id));
         switch (interneTab) {
-          case 'organisatie':     return <PageOrganisatie data={int.organisatie} analysis={analysis} apiKey={apiKey} onUpdate={onUpdate} />;
-          case 'merkidentiteit':  return <PageMerkidentiteit data={int.merkidentiteit} insights={pi('merkidentiteit')} />;
-          case 'kanaalstrategie': return <PageKanaalstrategie data={int.kanaalstrategie || {}} insights={pi('kanaalstrategie')} />;
-          case 'doelgroep':       return <PageDoelgroep data={int.doelgroep} insights={pi('doelgroep')} />;
-          case 'contentanalyse':  return <PageContentanalyse data={int.contentanalyse} insights={pi('contentanalyse')} />;
-          case 'strategisch':     return <PageStrategischeContent data={int.strategischeContent} insights={pi('strategisch')} />;
-          case 'community':       return <PageCommunity data={int.communityAnalyse} insights={pi('community')} />;
-          case 'middelen':        return <PageMiddelen data={int.middelen} insights={pi('middelen')} />;
-          case 'swot':            return <PageSwot data={int.swot} analysis={analysis} apiKey={apiKey} onUpdate={onUpdate} />;
+          case 'organisatie':     return withNote('organisatie',     <PageOrganisatie data={int.organisatie} analysis={analysis} apiKey={apiKey} onUpdate={onUpdate} />);
+          case 'merkidentiteit':  return withNote('merkidentiteit',  <PageMerkidentiteit data={int.merkidentiteit} insights={pi('merkidentiteit')} />);
+          case 'kanaalstrategie': return withNote('kanalen',         <PageKanaalstrategie data={int.kanaalstrategie || {}} insights={pi('kanaalstrategie')} />);
+          case 'doelgroep':       return withNote('doelgroep',       <PageDoelgroep data={int.doelgroep} insights={pi('doelgroep')} />);
+          case 'contentanalyse':  return withNote('content',         <PageContentanalyse data={int.contentanalyse} insights={pi('contentanalyse')} />);
+          case 'strategisch':     return withNote('strategie',       <PageStrategischeContent data={int.strategischeContent} insights={pi('strategisch')} />);
+          case 'community':       return withNote('community',       <PageCommunity data={int.communityAnalyse} insights={pi('community')} />);
+          case 'middelen':        return withNote('middelen',        <PageMiddelen data={int.middelen} insights={pi('middelen')} />);
+          case 'swot':            return withNote('swot',            <PageSwot data={int.swot} analysis={analysis} apiKey={apiKey} onUpdate={onUpdate} />);
+          case 'website':         return withNote('website',         <PageWebsite data={int.contentFormats?.website} />);
+          case 'email':           return withNote('email',           <PageEmail data={int.contentFormats?.email} />);
+          case 'advertenties':    return withNote('advertenties',    <PageAdvertenties data={int.contentFormats?.advertenties} />);
+          case 'printOffline':    return withNote('printOffline',    <PagePrintOffline data={int.contentFormats?.printOffline} />);
           default:                return null;
         }
       };
 
       const renderExternePage = () => {
         switch (externeTab) {
-          case 'concurrentie':    return <PageConcurrentie data={ext.concurrentieanalyse} analysis={analysis} />;
-          case 'samenwerkingen':  return <PageSamenwerkingen data={ext.samenwerkingen || {}} />;
-          case 'markt':           return <PageMarkt data={ext.marktSceneAnalyse} />;
-          case 'doelgroepgedrag': return <PageDoelgroepgedrag data={ext.doelgroepgedrag} />;
-          case 'trends':          return <PageCultureleTrends data={ext.cultureleTrends} />;
+          case 'concurrentie':    return withNote('concurrentie',    <PageConcurrentie data={ext.concurrentieanalyse} analysis={analysis} />);
+          case 'samenwerkingen':  return withNote('samenwerkingen',  <PageSamenwerkingen data={ext.samenwerkingen || {}} />);
+          case 'markt':           return withNote('markt',           <PageMarkt data={ext.marktSceneAnalyse} />);
+          case 'doelgroepgedrag': return withNote('doelgroepgedrag', <PageDoelgroepgedrag data={ext.doelgroepgedrag} />);
+          case 'trends':          return withNote('trends',          <PageCultureleTrends data={ext.cultureleTrends} />);
           default:                return null;
         }
       };
@@ -3333,7 +3512,7 @@ ${parts.join('\n')}</body></html>`;
             <div className="bg-white border-b border-gray-100">
               <div className="max-w-2xl mx-auto px-4 py-2">
                 {mainTab === 'interne'
-                  ? <SubTabBar tabs={INTERNE_TABS} active={interneTab} onChange={setInterneTab} />
+                  ? <SubTabBar tabs={interneTabs} active={interneTab} onChange={setInterneTab} />
                   : <SubTabBar tabs={EXTERNE_TABS} active={externeTab} onChange={setExterneTab} />
                 }
               </div>
@@ -3455,6 +3634,14 @@ ${parts.join('\n')}</body></html>`;
         setData(d => ({ ...d, interneAnalyse: { ...d.interneAnalyse, [section]: { ...d.interneAnalyse[section], [key]: val } } }));
       const se = (section, key, val) =>
         setData(d => ({ ...d, externeAnalyse: { ...d.externeAnalyse, [section]: { ...d.externeAnalyse[section], [key]: val } } }));
+      const scf = (sub, key, val) =>
+        setData(d => ({ ...d, interneAnalyse: { ...d.interneAnalyse, contentFormats: { ...d.interneAnalyse.contentFormats, [sub]: { ...d.interneAnalyse.contentFormats[sub], [key]: val } } } }));
+      const toggleFormat = (fmt) =>
+        setData(d => {
+          const cur = d.interneAnalyse.contentFormats.actief || ['socialeMedia'];
+          const next = cur.includes(fmt) ? cur.filter(f => f !== fmt) : [...cur, fmt];
+          return { ...d, interneAnalyse: { ...d.interneAnalyse, contentFormats: { ...d.interneAnalyse.contentFormats, actief: next } } };
+        });
 
       const setConcurrent = (i, key, val) => {
         setData(d => {
@@ -3562,12 +3749,123 @@ ${parts.join('\n')}</body></html>`;
 
               {step === 3 && (
                 <div className="fade-in">
+                  {/* Format toggles */}
+                  {(() => {
+                    const actief = int.contentFormats.actief;
+                    const FORMATS = [
+                      { id: 'socialeMedia',  label: 'Sociale media',       icon: '📱', fixed: true },
+                      { id: 'website',       label: 'Website / Blog',       icon: '🌐' },
+                      { id: 'email',         label: 'E-mailmarketing',      icon: '📧' },
+                      { id: 'advertenties',  label: 'Betaalde advertenties', icon: '📢' },
+                      { id: 'printOffline',  label: 'Print / Offline',      icon: '🖨️' },
+                    ];
+                    return (
+                      <div className="mb-5 bg-white border border-gray-200 rounded-2xl p-4">
+                        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Actieve contentformats</p>
+                        <div className="flex flex-wrap gap-2">
+                          {FORMATS.map(f => {
+                            const on = actief.includes(f.id);
+                            return (
+                              <button
+                                key={f.id}
+                                type="button"
+                                disabled={f.fixed}
+                                onClick={() => !f.fixed && toggleFormat(f.id)}
+                                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${on ? 'bg-violet-600 text-white border-violet-600' : 'bg-white text-gray-500 border-gray-200 hover:border-gray-300'} ${f.fixed ? 'opacity-70 cursor-default' : 'cursor-pointer'}`}
+                              >
+                                <span>{f.icon}</span>
+                                <span>{f.label}</span>
+                                {on && !f.fixed && <span className="ml-0.5 opacity-70">✓</span>}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })()}
                   <SubSection letter="C" title="Kanaalstrategie" subtitle="Op welke kanalen is het merk actief en waarom?">
                     <Field label="Actieve platformen" hint="Welke sociale media / kanalen gebruikt het merk?" value={int.kanaalstrategie.actievePlatformen} onChange={v => si('kanaalstrategie','actievePlatformen',v)} rows={2} />
                     <Field label="Strategische onderbouwing per platform" hint="Waarom wordt elk platform ingezet?" value={int.kanaalstrategie.onderbouwingPerPlatform} onChange={v => si('kanaalstrategie','onderbouwingPerPlatform',v)} rows={3} />
                     <Field label="Primair kanaal" hint="Waar zit de meeste focus en energie?" value={int.kanaalstrategie.primairKanaal} onChange={v => si('kanaalstrategie','primairKanaal',v)} rows={2} />
                     <Field label="Ontbrekende kanalen" hint="Welke kanalen worden niet gebruikt maar zijn wel relevant?" value={int.kanaalstrategie.ontbrekendeKanalen} onChange={v => si('kanaalstrategie','ontbrekendeKanalen',v)} rows={2} />
                   </SubSection>
+                  {int.contentFormats.actief.includes('website') && (
+                    <SubSection letter="W" title="Website / Blog" subtitle="Online aanwezigheid buiten sociale media.">
+                      <Field label="URL van de website" value={int.contentFormats.website.url} onChange={v => scf('website','url',v)} rows={1} />
+                      <Field label="Gem. maandelijks bezoekers" value={int.contentFormats.website.maandelijksBezoekers} onChange={v => scf('website','maandelijksBezoekers',v)} rows={1} />
+                      <Field label="Bounce rate (%)" value={int.contentFormats.website.bounceRate} onChange={v => scf('website','bounceRate',v)} rows={1} />
+                      <Field label="Gem. tijd op pagina" value={int.contentFormats.website.tijdOpPagina} onChange={v => scf('website','tijdOpPagina',v)} rows={1} />
+                      <Field label="Blogposts per maand" value={int.contentFormats.website.blogpostsPerMaand} onChange={v => scf('website','blogpostsPerMaand',v)} rows={1} />
+                      <Field label="Primaire zoekwoorden" hint="Waarop wordt het merk gevonden?" value={int.contentFormats.website.zoekwoorden} onChange={v => scf('website','zoekwoorden',v)} rows={2} />
+                      <Field label="Sterkste pagina of blogpost" value={int.contentFormats.website.sterkstePagina} onChange={v => scf('website','sterkstePagina',v)} rows={1} />
+                      <GroupLabel label="SEO-zichtbaarheid" />
+                      <div className="flex gap-2 flex-wrap">
+                        {['hoog','matig','laag'].map(v => (
+                          <button key={v} type="button" onClick={() => scf('website','seoScore',v)} className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${int.contentFormats.website.seoScore === v ? 'bg-gray-900 text-white border-gray-900' : 'bg-white text-gray-500 border-gray-200 hover:border-gray-300'}`}>{v.charAt(0).toUpperCase()+v.slice(1)}</button>
+                        ))}
+                      </div>
+                      <GroupLabel label="CTA aanwezig op website" />
+                      <div className="flex gap-2">
+                        {['ja','nee'].map(v => (
+                          <button key={v} type="button" onClick={() => scf('website','ctaAanwezig',v)} className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${int.contentFormats.website.ctaAanwezig === v ? 'bg-gray-900 text-white border-gray-900' : 'bg-white text-gray-500 border-gray-200 hover:border-gray-300'}`}>{v.charAt(0).toUpperCase()+v.slice(1)}</button>
+                        ))}
+                      </div>
+                    </SubSection>
+                  )}
+                  {int.contentFormats.actief.includes('email') && (
+                    <SubSection letter="EM" title="E-mailmarketing">
+                      <Field label="E-mailplatform (bijv. Mailchimp, Klaviyo)" value={int.contentFormats.email.platform} onChange={v => scf('email','platform',v)} rows={1} />
+                      <Field label="Aantal subscribers" value={int.contentFormats.email.subscribers} onChange={v => scf('email','subscribers',v)} rows={1} />
+                      <Field label="Gemiddelde open rate (%)" value={int.contentFormats.email.openRate} onChange={v => scf('email','openRate',v)} rows={1} />
+                      <Field label="Gemiddelde click rate (%)" value={int.contentFormats.email.clickRate} onChange={v => scf('email','clickRate',v)} rows={1} />
+                      <Field label="Verzendfrequentie" value={int.contentFormats.email.verzendfrequentie} onChange={v => scf('email','verzendfrequentie',v)} rows={1} />
+                      <Field label="Type e-mails" hint="Nieuwsbrief, promotioneel, geautomatiseerd…" value={int.contentFormats.email.typeEmails} onChange={v => scf('email','typeEmails',v)} rows={2} />
+                      <GroupLabel label="Segmentatie aanwezig" />
+                      <div className="flex gap-2">
+                        {['ja','nee'].map(v => (
+                          <button key={v} type="button" onClick={() => scf('email','segmentatie',v)} className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${int.contentFormats.email.segmentatie === v ? 'bg-gray-900 text-white border-gray-900' : 'bg-white text-gray-500 border-gray-200 hover:border-gray-300'}`}>{v.charAt(0).toUpperCase()+v.slice(1)}</button>
+                        ))}
+                      </div>
+                    </SubSection>
+                  )}
+                  {int.contentFormats.actief.includes('advertenties') && (
+                    <SubSection letter="Ad" title="Betaalde Advertenties">
+                      <GroupLabel label="Platforms" />
+                      <div className="flex gap-2 flex-wrap">
+                        {['Meta Ads','Google Ads','Beide'].map(v => (
+                          <button key={v} type="button" onClick={() => scf('advertenties','platforms',v)} className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${int.contentFormats.advertenties.platforms === v ? 'bg-gray-900 text-white border-gray-900' : 'bg-white text-gray-500 border-gray-200 hover:border-gray-300'}`}>{v}</button>
+                        ))}
+                      </div>
+                      <Field label="Maandelijks budget (€)" value={int.contentFormats.advertenties.maandelijksBudget} onChange={v => scf('advertenties','maandelijksBudget',v)} rows={1} />
+                      <Field label="Gem. cost per click (€)" value={int.contentFormats.advertenties.costPerClick} onChange={v => scf('advertenties','costPerClick',v)} rows={1} />
+                      <Field label="Gem. cost per lead / conversie (€)" value={int.contentFormats.advertenties.costPerLead} onChange={v => scf('advertenties','costPerLead',v)} rows={1} />
+                      <GroupLabel label="Primaire doelstelling" />
+                      <div className="flex gap-2 flex-wrap">
+                        {['Bereik','Clicks','Conversies'].map(v => (
+                          <button key={v} type="button" onClick={() => scf('advertenties','doelstelling',v)} className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${int.contentFormats.advertenties.doelstelling === v ? 'bg-gray-900 text-white border-gray-900' : 'bg-white text-gray-500 border-gray-200 hover:border-gray-300'}`}>{v}</button>
+                        ))}
+                      </div>
+                      <GroupLabel label="Remarketing actief" />
+                      <div className="flex gap-2">
+                        {['ja','nee'].map(v => (
+                          <button key={v} type="button" onClick={() => scf('advertenties','remarketing',v)} className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${int.contentFormats.advertenties.remarketing === v ? 'bg-gray-900 text-white border-gray-900' : 'bg-white text-gray-500 border-gray-200 hover:border-gray-300'}`}>{v.charAt(0).toUpperCase()+v.slice(1)}</button>
+                        ))}
+                      </div>
+                    </SubSection>
+                  )}
+                  {int.contentFormats.actief.includes('printOffline') && (
+                    <SubSection letter="P" title="Print / Offline">
+                      <Field label="Welke formats" hint="Bijv. flyers, affiches, magazine, events…" value={int.contentFormats.printOffline.formats} onChange={v => scf('printOffline','formats',v)} rows={2} />
+                      <Field label="Frequentie" value={int.contentFormats.printOffline.frequentie} onChange={v => scf('printOffline','frequentie',v)} rows={1} />
+                      <Field label="Doelgebied / verspreiding" value={int.contentFormats.printOffline.doelgebied} onChange={v => scf('printOffline','doelgebied',v)} rows={2} />
+                      <GroupLabel label="QR-code of landingspagina aanwezig" />
+                      <div className="flex gap-2">
+                        {['ja','nee'].map(v => (
+                          <button key={v} type="button" onClick={() => scf('printOffline','koppelingOnline',v)} className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${int.contentFormats.printOffline.koppelingOnline === v ? 'bg-gray-900 text-white border-gray-900' : 'bg-white text-gray-500 border-gray-200 hover:border-gray-300'}`}>{v.charAt(0).toUpperCase()+v.slice(1)}</button>
+                        ))}
+                      </div>
+                    </SubSection>
+                  )}
                   <SubSection letter="D" title="Doelgroep (huidige)">
                     <Field label="Wie volgt het merk nu?" value={int.doelgroep.wieVolgt} onChange={v => si('doelgroep','wieVolgt',v)} rows={2} />
                     <Field label="Leeftijd / interesses" value={int.doelgroep.leeftijdInteresses} onChange={v => si('doelgroep','leeftijdInteresses',v)} rows={2} />
@@ -3951,7 +4249,7 @@ ${parts.join('\n')}</body></html>`;
 
     // ─── SimpleLineChart ───────────────────────────────────────────────────────
     function SimpleLineChart({ series, versionLabels }) {
-      const W = 520, H = 180, PAD = { top: 20, right: 20, bottom: 30, left: 36 };
+      const W = 520, H = 200, PAD = { top: 32, right: 20, bottom: 32, left: 42 };
       const iW = W - PAD.left - PAD.right;
       const iH = H - PAD.top - PAD.bottom;
       const n = versionLabels.length;
@@ -3959,15 +4257,19 @@ ${parts.join('\n')}</body></html>`;
       const xPos = (i) => PAD.left + (i / (n - 1)) * iW;
 
       return (
-        <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ maxHeight: 180 }}>
-          {series.map(({ label, values, color }) => {
+        <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ maxHeight: 200 }}>
+          {series.map(({ label, unit, values, color }) => {
             const vals = values.map(v => (v == null ? null : Number(v)));
             const defined = vals.filter(v => v != null);
             if (!defined.length) return null;
             const minV = Math.min(...defined);
             const maxV = Math.max(...defined);
-            const range = maxV - minV || 1;
-            const yPos = (v) => PAD.top + iH - ((v - minV) / range) * iH;
+            const spread = maxV - minV || 1;
+            const yMin = Math.max(0, minV - spread * 0.25);
+            const yMax = maxV + spread * 0.1;
+            const range = yMax - yMin || 1;
+            const yPos = (v) => PAD.top + iH - ((v - yMin) / range) * iH;
+            const fmt = (v) => unit === '%' ? `${Math.round(v * 10) / 10}%` : String(Math.round(v * 10) / 10);
             const points = vals.map((v, i) => v == null ? null : [xPos(i), yPos(v)]);
             let d = '';
             points.forEach((p, i) => {
@@ -3977,9 +4279,15 @@ ${parts.join('\n')}</body></html>`;
             });
             return (
               <g key={label}>
-                <path d={d} fill="none" stroke={color} strokeWidth="2" strokeLinejoin="round" />
+                <path d={d} fill="none" stroke={color} strokeWidth="2" strokeLinejoin="round" strokeDasharray={n === 2 ? 'none' : 'none'} />
                 {points.map((p, i) => p && (
-                  <circle key={i} cx={p[0]} cy={p[1]} r={3} fill={color} />
+                  <g key={i}>
+                    <circle cx={p[0]} cy={p[1]} r={4} fill="white" stroke={color} strokeWidth="2" />
+                    <circle cx={p[0]} cy={p[1]} r={2} fill={color} />
+                    <text x={p[0]} y={p[1] - 9} textAnchor="middle" fontSize="10" fill={color} fontWeight="700">
+                      {fmt(vals[i])}
+                    </text>
+                  </g>
                 ))}
               </g>
             );
@@ -3988,9 +4296,10 @@ ${parts.join('\n')}</body></html>`;
             <text key={i} x={xPos(i)} y={H - 4} textAnchor="middle" fontSize="10" fill="#9ca3af">{lbl}</text>
           ))}
           {series.map(({ label, color }, i) => (
-            <g key={label} transform={`translate(${PAD.left + i * 130}, 10)`}>
+            <g key={label} transform={`translate(${PAD.left + i * 145}, 14)`}>
               <line x1="0" y1="5" x2="12" y2="5" stroke={color} strokeWidth="2" />
-              <text x="16" y="9" fontSize="10" fill="#6b7280">{label}</text>
+              <circle cx="6" cy="5" r="2" fill={color} />
+              <text x="17" y="9" fontSize="10" fill="#6b7280">{label}</text>
             </g>
           ))}
         </svg>
@@ -4120,11 +4429,13 @@ ${parts.join('\n')}</body></html>`;
       const [bullets, setBullets] = useState([]);
       const [loadingAI, setLoadingAI] = useState(false);
       const [aiError, setAiError] = useState('');
+      const [expandedSections, setExpandedSections] = useState({});
 
       const vA = allVersions.find(v => v.id === selA) || allVersions[0];
       const vB = allVersions.find(v => v.id === selB) || allVersions[1] || allVersions[0];
 
       const versionLabel = (v) => v.versieNummer != null ? `V${v.versieNummer}` : 'Orig.';
+      const toggleSection = (key) => setExpandedSections(s => ({ ...s, [key]: !s[key] }));
 
       const handleAICompare = async () => {
         if (!apiKey) { setAiError('Voer eerst een API-sleutel in.'); return; }
@@ -4142,28 +4453,135 @@ ${parts.join('\n')}</body></html>`;
         }
       };
 
+      // Score card values
+      const communityA = computeCommunityScore(vA.interneAnalyse?.communityAnalyse || {});
+      const communityB = computeCommunityScore(vB.interneAnalyse?.communityAnalyse || {});
+      const erA = parseEngagementRate(getEngagementRate(vA.interneAnalyse?.contentanalyse || {}));
+      const erB = parseEngagementRate(getEngagementRate(vB.interneAnalyse?.contentanalyse || {}));
+      const healthA = computeHealthScore(vA);
+      const healthB = computeHealthScore(vB);
+
+      const scoreCards = [
+        { label: 'Community', valA: communityA, valB: communityB, unit: '%', fmt: v => v != null ? `${v}%` : '—' },
+        { label: 'Engagement rate', valA: erA, valB: erB, unit: '%', fmt: v => v != null ? `${Math.round(v * 10) / 10}%` : '—' },
+        { label: 'Health score', valA: healthA.positieven, valB: healthB.positieven, unit: '', fmt: v => `${v}/4` },
+      ];
+
       // Build chart series
       const chartVersions = allVersions;
       const chartLabels = chartVersions.map(versionLabel);
       const series = [
-        { label: 'Community %', color: '#8b5cf6', values: chartVersions.map(v => computeCommunityScore(v.interneAnalyse?.communityAnalyse || {})) },
-        { label: 'ER %', color: '#10b981', values: chartVersions.map(v => parseEngagementRate(getEngagementRate(v.interneAnalyse?.contentanalyse || {}))) },
-        { label: 'Health (pos/4)', color: '#f59e0b', values: chartVersions.map(v => computeHealthScore(v).positieven) },
+        { label: 'Community', unit: '%', color: '#8b5cf6', values: chartVersions.map(v => computeCommunityScore(v.interneAnalyse?.communityAnalyse || {})) },
+        { label: 'Engagement rate', unit: '%', color: '#10b981', values: chartVersions.map(v => parseEngagementRate(getEngagementRate(v.interneAnalyse?.contentanalyse || {}))) },
+        { label: 'Health (0–4)', unit: '', color: '#f59e0b', values: chartVersions.map(v => computeHealthScore(v).positieven) },
       ];
 
       const typeIcon = { verbeterd: '↑', verslechterd: '↓', nieuw: '→' };
       const typeColor = { verbeterd: 'text-emerald-600', verslechterd: 'text-red-500', nieuw: 'text-blue-500' };
 
-      // Delta: compare fields between vA and vB
-      const deltaFields = [
-        ['Merkidentiteit — Waarden/Missie', vA.interneAnalyse?.merkidentiteit?.waardenMissie, vB.interneAnalyse?.merkidentiteit?.waardenMissie],
-        ['Positionering', vA.interneAnalyse?.merkidentiteit?.huidigePositionering, vB.interneAnalyse?.merkidentiteit?.huidigePositionering],
-        ['SWOT — Sterktes', vA.interneAnalyse?.swot?.strengths, vB.interneAnalyse?.swot?.strengths],
-        ['SWOT — Zwaktes', vA.interneAnalyse?.swot?.weaknesses, vB.interneAnalyse?.swot?.weaknesses],
-        ['SWOT — Kansen', vA.interneAnalyse?.swot?.opportunities, vB.interneAnalyse?.swot?.opportunities],
-        ['Doelgroep gewenst', vA.interneAnalyse?.doelgroep?.gewensteDoelgroep, vB.interneAnalyse?.doelgroep?.gewensteDoelgroep],
-        ['Kanalen', vA.interneAnalyse?.kanaalstrategie?.actievePlatformen, vB.interneAnalyse?.kanaalstrategie?.actievePlatformen],
-      ].filter(([, a, b]) => (a || '') !== (b || ''));
+      // Field sentiment helper
+      const fieldSentiment = (a, b) => {
+        const aLen = (a || '').trim().length;
+        const bLen = (b || '').trim().length;
+        if (aLen === 0 && bLen > 0) return 'pos';
+        if (aLen > 0 && bLen === 0) return 'neg';
+        if (bLen > aLen) return 'pos';
+        if (bLen < aLen) return 'neg';
+        return 'neutral';
+      };
+
+      // Grouped delta fields
+      const rawGroups = [
+        { key: 'merkidentiteit', sectie: 'Merkidentiteit', velden: [
+          ['Visuele identiteit', vA.interneAnalyse?.merkidentiteit?.visuelIdentiteit, vB.interneAnalyse?.merkidentiteit?.visuelIdentiteit],
+          ['Tone of voice', vA.interneAnalyse?.merkidentiteit?.toneOfVoice, vB.interneAnalyse?.merkidentiteit?.toneOfVoice],
+          ['Consistentie branding', vA.interneAnalyse?.merkidentiteit?.consistentieBranding, vB.interneAnalyse?.merkidentiteit?.consistentieBranding],
+          ['Waarden / Missie', vA.interneAnalyse?.merkidentiteit?.waardenMissie, vB.interneAnalyse?.merkidentiteit?.waardenMissie],
+          ['Positionering', vA.interneAnalyse?.merkidentiteit?.huidigePositionering, vB.interneAnalyse?.merkidentiteit?.huidigePositionering],
+        ]},
+        { key: 'kanalen', sectie: 'Kanalen', velden: [
+          ['Actieve platformen', vA.interneAnalyse?.kanaalstrategie?.actievePlatformen, vB.interneAnalyse?.kanaalstrategie?.actievePlatformen],
+          ['Onderbouwing per platform', vA.interneAnalyse?.kanaalstrategie?.onderbouwingPerPlatform, vB.interneAnalyse?.kanaalstrategie?.onderbouwingPerPlatform],
+          ['Primair kanaal', vA.interneAnalyse?.kanaalstrategie?.primairKanaal, vB.interneAnalyse?.kanaalstrategie?.primairKanaal],
+          ['Ontbrekende kanalen', vA.interneAnalyse?.kanaalstrategie?.ontbrekendeKanalen, vB.interneAnalyse?.kanaalstrategie?.ontbrekendeKanalen],
+        ]},
+        { key: 'doelgroep', sectie: 'Doelgroep', velden: [
+          ['Wie volgt', vA.interneAnalyse?.doelgroep?.wieVolgt, vB.interneAnalyse?.doelgroep?.wieVolgt],
+          ['Gewenste doelgroep', vA.interneAnalyse?.doelgroep?.gewensteDoelgroep, vB.interneAnalyse?.doelgroep?.gewensteDoelgroep],
+          ['Werkelijke doelgroep', vA.interneAnalyse?.doelgroep?.werkelijkeDoelgroep, vB.interneAnalyse?.doelgroep?.werkelijkeDoelgroep],
+          ['Community interactie', vA.interneAnalyse?.doelgroep?.communityInteractie, vB.interneAnalyse?.doelgroep?.communityInteractie],
+        ]},
+        { key: 'strategie', sectie: 'Strategie & Content', velden: [
+          ['Positioneringsconsistentie', vA.interneAnalyse?.strategischeContent?.positioneringsconsistentie, vB.interneAnalyse?.strategischeContent?.positioneringsconsistentie],
+          ['Tone of voice', vA.interneAnalyse?.strategischeContent?.toneOfVoice, vB.interneAnalyse?.strategischeContent?.toneOfVoice],
+          ['Storytelling', vA.interneAnalyse?.strategischeContent?.storytelling, vB.interneAnalyse?.strategischeContent?.storytelling],
+          ['Doelgroepresonantie', vA.interneAnalyse?.strategischeContent?.doelgroepresonantie, vB.interneAnalyse?.strategischeContent?.doelgroepresonantie],
+          ['Formatstrategie', vA.interneAnalyse?.strategischeContent?.formatstrategie, vB.interneAnalyse?.strategischeContent?.formatstrategie],
+        ]},
+        { key: 'community', sectie: 'Community', velden: [
+          ['Interactie comments', vA.interneAnalyse?.communityAnalyse?.interactieComments, vB.interneAnalyse?.communityAnalyse?.interactieComments],
+          ['Terugkerende fans', vA.interneAnalyse?.communityAnalyse?.terugkerendeFans, vB.interneAnalyse?.communityAnalyse?.terugkerendeFans],
+          ['User generated content', vA.interneAnalyse?.communityAnalyse?.userGeneratedContent, vB.interneAnalyse?.communityAnalyse?.userGeneratedContent],
+          ['Community betrokkenheid', vA.interneAnalyse?.communityAnalyse?.communityBetrokkenheid, vB.interneAnalyse?.communityAnalyse?.communityBetrokkenheid],
+        ]},
+        { key: 'middelen', sectie: 'Middelen', velden: [
+          ['Budget', vA.interneAnalyse?.middelen?.budget, vB.interneAnalyse?.middelen?.budget],
+          ['Tijd', vA.interneAnalyse?.middelen?.tijd, vB.interneAnalyse?.middelen?.tijd],
+          ['Team', vA.interneAnalyse?.middelen?.team, vB.interneAnalyse?.middelen?.team],
+          ['Skills', vA.interneAnalyse?.middelen?.skills, vB.interneAnalyse?.middelen?.skills],
+        ]},
+        { key: 'swot', sectie: 'SWOT', velden: [
+          ['Sterktes', vA.interneAnalyse?.swot?.strengths, vB.interneAnalyse?.swot?.strengths],
+          ['Zwaktes', vA.interneAnalyse?.swot?.weaknesses, vB.interneAnalyse?.swot?.weaknesses],
+          ['Kansen', vA.interneAnalyse?.swot?.opportunities, vB.interneAnalyse?.swot?.opportunities],
+          ['Bedreigingen', vA.interneAnalyse?.swot?.threats, vB.interneAnalyse?.swot?.threats],
+        ]},
+        { key: 'markt', sectie: 'Markt & Scene', velden: [
+          ['Grootte scene', vA.externeAnalyse?.marktSceneAnalyse?.grootteScene, vB.externeAnalyse?.marktSceneAnalyse?.grootteScene],
+          ['Populariteit genre', vA.externeAnalyse?.marktSceneAnalyse?.populariteitGenre, vB.externeAnalyse?.marktSceneAnalyse?.populariteitGenre],
+          ['Marktverzadiging', vA.externeAnalyse?.marktSceneAnalyse?.marktverzadiging, vB.externeAnalyse?.marktSceneAnalyse?.marktverzadiging],
+        ]},
+        { key: 'notities', sectie: 'Notities', velden: [
+          ['Organisatie', (vA.notities || {}).organisatie, (vB.notities || {}).organisatie],
+          ['Merkidentiteit', (vA.notities || {}).merkidentiteit, (vB.notities || {}).merkidentiteit],
+          ['Kanalen', (vA.notities || {}).kanalen, (vB.notities || {}).kanalen],
+          ['Doelgroep', (vA.notities || {}).doelgroep, (vB.notities || {}).doelgroep],
+          ['Content', (vA.notities || {}).content, (vB.notities || {}).content],
+          ['Strategie', (vA.notities || {}).strategie, (vB.notities || {}).strategie],
+          ['Community', (vA.notities || {}).community, (vB.notities || {}).community],
+          ['Middelen', (vA.notities || {}).middelen, (vB.notities || {}).middelen],
+          ['SWOT', (vA.notities || {}).swot, (vB.notities || {}).swot],
+          ['Concurrentie', (vA.notities || {}).concurrentie, (vB.notities || {}).concurrentie],
+          ['Markt & Scene', (vA.notities || {}).markt, (vB.notities || {}).markt],
+          ['Doelgroepgedrag', (vA.notities || {}).doelgroepgedrag, (vB.notities || {}).doelgroepgedrag],
+          ['Trends', (vA.notities || {}).trends, (vB.notities || {}).trends],
+        ]},
+      ];
+
+      const fieldGroups = rawGroups.map(g => ({
+        ...g,
+        velden: g.velden.filter(([, a, b]) => (a || '').trim() !== (b || '').trim()),
+      })).filter(g => g.velden.length > 0);
+
+      const sectionSentiment = (velden) => {
+        let pos = 0, neg = 0;
+        velden.forEach(([, a, b]) => {
+          const s = fieldSentiment(a, b);
+          if (s === 'pos') pos++;
+          else if (s === 'neg') neg++;
+        });
+        if (pos > 0 && neg === 0) return 'verbeterd';
+        if (neg > 0 && pos === 0) return 'verslechterd';
+        if (pos >= neg) return 'verbeterd';
+        if (neg > pos) return 'verslechterd';
+        return 'gemengd';
+      };
+
+      const sentimentStyle = {
+        verbeterd:    { bar: 'bg-emerald-400', labelColor: 'text-emerald-600', text: 'Verbeterd' },
+        verslechterd: { bar: 'bg-red-400',     labelColor: 'text-red-600',     text: 'Verslechterd' },
+        gemengd:      { bar: 'bg-amber-400',   labelColor: 'text-amber-600',   text: 'Gemengd' },
+      };
 
       return (
         <div className="min-h-screen bg-gray-50 fade-in">
@@ -4176,7 +4594,7 @@ ${parts.join('\n')}</body></html>`;
             <p className="text-sm text-gray-400 mb-6">{family.root.klantnaam || 'Naamloos'}</p>
 
             {/* Version selectors */}
-            <div className="flex gap-3 mb-6">
+            <div className="flex gap-3 mb-5">
               {['A','B'].map((lbl, idx) => {
                 const sel = idx === 0 ? selA : selB;
                 const setSel = idx === 0 ? setSelA : setSelB;
@@ -4193,20 +4611,57 @@ ${parts.join('\n')}</body></html>`;
               })}
             </div>
 
-            {/* Navigate buttons */}
-            <div className="flex gap-2 mb-6">
-              <button onClick={() => onOpenVersion(vA)} className="text-xs bg-white border border-gray-200 text-gray-700 px-3 py-1.5 rounded-lg hover:bg-gray-50 transition-colors">
-                Bekijk {versionLabel(vA)} volledig
-              </button>
-              <button onClick={() => onOpenVersion(vB)} className="text-xs bg-white border border-gray-200 text-gray-700 px-3 py-1.5 rounded-lg hover:bg-gray-50 transition-colors">
-                Bekijk {versionLabel(vB)} volledig
-              </button>
+            {/* Score cards */}
+            <div className="grid grid-cols-3 gap-3 mb-5">
+              {scoreCards.map(({ label, valA, valB, unit, fmt }) => {
+                const delta = valA != null && valB != null ? valB - valA : null;
+                const improved = delta !== null && delta > 0;
+                const worsened = delta !== null && delta < 0;
+                const arrowColor = improved ? 'text-emerald-500' : worsened ? 'text-red-500' : 'text-gray-400';
+                const bColor = improved ? 'text-emerald-600' : worsened ? 'text-red-600' : 'text-gray-700';
+                const deltaStr = delta !== null
+                  ? `${delta > 0 ? '+' : ''}${Math.round(delta * 10) / 10}${unit}`
+                  : null;
+                return (
+                  <div key={label} className="bg-white border border-gray-100 rounded-2xl p-3">
+                    <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-3 text-center">{label}</p>
+                    <div className="flex items-center justify-between gap-1">
+                      <div className="flex-1 text-center">
+                        <p className="text-[10px] text-gray-400 mb-0.5">{versionLabel(vA)}</p>
+                        <p className="text-xl font-bold text-gray-600">{fmt(valA)}</p>
+                      </div>
+                      <div className="flex flex-col items-center shrink-0 px-1">
+                        <span className={`text-base font-bold leading-none ${arrowColor}`}>
+                          {improved ? '↑' : worsened ? '↓' : '→'}
+                        </span>
+                        {deltaStr && (
+                          <span className={`text-[10px] font-semibold mt-0.5 ${arrowColor}`}>{deltaStr}</span>
+                        )}
+                      </div>
+                      <div className="flex-1 text-center">
+                        <p className="text-[10px] text-gray-400 mb-0.5">{versionLabel(vB)}</p>
+                        <p className={`text-xl font-bold ${bColor}`}>{fmt(valB)}</p>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
 
             {/* Line chart */}
             <div className="bg-white border border-gray-100 rounded-2xl p-4 mb-4">
               <p className="text-xs font-semibold text-gray-500 mb-3 uppercase tracking-wide">Evolutie over versies</p>
               <SimpleLineChart series={series} versionLabels={chartLabels} />
+            </div>
+
+            {/* Navigate buttons */}
+            <div className="flex gap-2 mb-4">
+              <button onClick={() => onOpenVersion(vA)} className="text-xs bg-white border border-gray-200 text-gray-700 px-3 py-1.5 rounded-lg hover:bg-gray-50 transition-colors">
+                Bekijk {versionLabel(vA)} volledig
+              </button>
+              <button onClick={() => onOpenVersion(vB)} className="text-xs bg-white border border-gray-200 text-gray-700 px-3 py-1.5 rounded-lg hover:bg-gray-50 transition-colors">
+                Bekijk {versionLabel(vB)} volledig
+              </button>
             </div>
 
             {/* AI comparison */}
@@ -4232,24 +4687,96 @@ ${parts.join('\n')}</body></html>`;
               )}
             </div>
 
-            {/* Delta view */}
-            {deltaFields.length > 0 && (
+            {/* Delta view — grouped collapsible */}
+            {fieldGroups.length > 0 && (
               <div className="bg-white border border-gray-100 rounded-2xl p-4">
                 <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Gewijzigde velden</p>
-                <div className="space-y-3">
-                  {deltaFields.map(([name, a, b]) => (
-                    <div key={name}>
-                      <p className="text-xs font-medium text-gray-600 mb-1">{name}</p>
-                      <div className="grid grid-cols-2 gap-2">
-                        <div className="text-xs bg-red-50 border border-red-100 rounded-lg p-2 text-red-700">{a || <em className="opacity-50">leeg</em>}</div>
-                        <div className="text-xs bg-emerald-50 border border-emerald-100 rounded-lg p-2 text-emerald-700">{b || <em className="opacity-50">leeg</em>}</div>
+                <div className="space-y-1.5">
+                  {fieldGroups.map(group => {
+                    const sentiment = sectionSentiment(group.velden);
+                    const st = sentimentStyle[sentiment];
+                    const isOpen = !!expandedSections[group.key];
+                    return (
+                      <div key={group.key} className="rounded-xl overflow-hidden border border-gray-100">
+                        <button
+                          onClick={() => toggleSection(group.key)}
+                          className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-gray-50 transition-colors text-left"
+                        >
+                          <div className={`w-1 self-stretch rounded-full ${st.bar} shrink-0`} />
+                          <span className="text-sm font-medium text-gray-800 flex-1">{group.sectie}</span>
+                          <span className="text-[10px] text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full shrink-0">
+                            {group.velden.length} veld{group.velden.length !== 1 ? 'en' : ''}
+                          </span>
+                          <span className={`text-[10px] font-semibold shrink-0 ${st.labelColor}`}>{st.text}</span>
+                          <svg width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"
+                            style={{ transform: isOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s', color: '#9ca3af', flexShrink: 0 }}>
+                            <path d="M6 9l6 6 6-6" strokeLinecap="round" strokeLinejoin="round"/>
+                          </svg>
+                        </button>
+                        {isOpen && (
+                          <div className="border-t border-gray-100 px-3 pt-3 pb-3 space-y-3">
+                            {group.velden.map(([name, a, b]) => (
+                              <div key={name}>
+                                <p className="text-xs font-medium text-gray-500 mb-1">{name}</p>
+                                <div className="grid grid-cols-2 gap-2">
+                                  <div className="text-xs bg-red-50 border border-red-100 rounded-lg p-2 text-red-700 leading-relaxed">{a || <em className="opacity-50">leeg</em>}</div>
+                                  <div className="text-xs bg-emerald-50 border border-emerald-100 rounded-lg p-2 text-emerald-700 leading-relaxed">{b || <em className="opacity-50">leeg</em>}</div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             )}
           </div>
+        </div>
+      );
+    }
+
+    // ─── NotitieBadge ─────────────────────────────────────────────────────────
+    function NotitieBadge({ sectieKey, analysis, onUpdate }) {
+      const [open, setOpen] = useState(false);
+      const note = ((analysis && analysis.notities) || {})[sectieKey] || '';
+      const hasNote = note.trim().length > 0;
+
+      const handleChange = (val) => {
+        onUpdate({ ...analysis, notities: { ...(analysis.notities || {}), [sectieKey]: val } });
+      };
+
+      return (
+        <div className="mt-4 pt-3 border-t border-gray-100">
+          <button
+            onClick={() => setOpen(o => !o)}
+            className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-gray-600 transition-colors"
+          >
+            {hasNote && <span className="w-2 h-2 rounded-full bg-amber-400 shrink-0" />}
+            <svg width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+              <path d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5" strokeLinecap="round" strokeLinejoin="round"/>
+              <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+            <span>{hasNote ? 'Notitie' : 'Notitie toevoegen'}</span>
+            {hasNote && (
+              <svg width="10" height="10" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"
+                style={{ transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s' }}>
+                <path d="M6 9l6 6 6-6" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            )}
+          </button>
+          {open && (
+            <div className="mt-2 fade-in">
+              <textarea
+                value={note}
+                onChange={e => handleChange(e.target.value)}
+                placeholder="Voeg een observatie of notitie toe bij deze sectie…"
+                className="w-full text-xs border border-gray-200 rounded-lg p-2.5 text-gray-700 placeholder-gray-300 focus:outline-none focus:border-violet-300 bg-amber-50/40"
+                rows={3}
+              />
+            </div>
+          )}
         </div>
       );
     }
@@ -4492,38 +5019,39 @@ ${parts.join('\n')}</body></html>`;
                         className="group px-5 py-4 flex items-center justify-between cursor-pointer hover:bg-gray-50 transition-colors"
                       >
                         <div className="flex items-center gap-3">
-                          {hasVersions && (
-                            <button
-                              onClick={e => { e.stopPropagation(); toggleFamily(root.id); }}
-                              className="text-gray-300 hover:text-gray-600 transition-colors"
-                              aria-label="Versies tonen"
-                            >
-                              <svg width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{ transform: isExpanded ? 'rotate(90deg)' : 'none', transition: 'transform 0.15s' }}>
-                                <path d="M9 6l6 6-6 6" strokeLinecap="round" strokeLinejoin="round"/>
-                              </svg>
-                            </button>
-                          )}
                           <div>
                             <div className="flex items-center gap-2">
                               <p className="text-sm font-semibold text-gray-900">{root.klantnaam || 'Naamloos'}</p>
                               <span className={`text-xs font-bold ${healthLetterColor[health.letter] || 'text-gray-400'}`}>{health.letter}</span>
-                              {hasVersions && <span className="text-[10px] text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded-full">{versions.length} versie{versions.length !== 1 ? 's' : ''}</span>}
                             </div>
                             <p className="text-xs text-gray-400 mt-0.5">{formatDate(root.datum)}</p>
                           </div>
                         </div>
-                        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                          {versions.length >= 1 && (
+                        <div className="flex items-center gap-2">
+                          {hasVersions && (
                             <button
-                              onClick={e => { e.stopPropagation(); onCompare({ root, versions }); }}
-                              className="text-xs text-violet-500 hover:text-violet-700 px-2.5 py-1.5 rounded-md hover:bg-violet-50 transition-colors"
+                              onClick={e => { e.stopPropagation(); toggleFamily(root.id); }}
+                              className="flex items-center gap-1.5 text-xs text-violet-600 hover:text-violet-800 px-2.5 py-1.5 rounded-md border border-violet-200 hover:border-violet-300 hover:bg-violet-50 transition-colors font-medium"
                             >
-                              Vergelijk
+                              <span>{isExpanded ? 'Versies verbergen' : `${versions.length} versie${versions.length !== 1 ? 's' : ''} bekijken`}</span>
+                              <svg width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24" style={{ transform: isExpanded ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s' }}>
+                                <path d="M6 9l6 6 6-6" strokeLinecap="round" strokeLinejoin="round"/>
+                              </svg>
                             </button>
                           )}
-                          <button onClick={e => { e.stopPropagation(); onExport(root); }} className="text-xs text-gray-400 hover:text-gray-700 px-2.5 py-1.5 rounded-md hover:bg-gray-50 transition-colors">Export</button>
-                          <button onClick={e => { e.stopPropagation(); onDelete(root.id); }} className="text-xs text-gray-400 hover:text-red-500 px-2.5 py-1.5 rounded-md hover:bg-red-50 transition-colors">Verwijder</button>
-                          <span className="text-gray-300 ml-1" aria-hidden="true">→</span>
+                          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                            {versions.length >= 1 && (
+                              <button
+                                onClick={e => { e.stopPropagation(); onCompare({ root, versions }); }}
+                                className="text-xs text-violet-500 hover:text-violet-700 px-2.5 py-1.5 rounded-md hover:bg-violet-50 transition-colors"
+                              >
+                                Vergelijk
+                              </button>
+                            )}
+                            <button onClick={e => { e.stopPropagation(); onExport(root); }} className="text-xs text-gray-400 hover:text-gray-700 px-2.5 py-1.5 rounded-md hover:bg-gray-50 transition-colors">Export</button>
+                            <button onClick={e => { e.stopPropagation(); onDelete(root.id); }} className="text-xs text-gray-400 hover:text-red-500 px-2.5 py-1.5 rounded-md hover:bg-red-50 transition-colors">Verwijder</button>
+                            <span className="text-gray-300 ml-1" aria-hidden="true">→</span>
+                          </div>
                         </div>
                       </div>
 
