@@ -1,15 +1,40 @@
 # Marketing Analyse App — Savestate
 
 ## Laatste opslag
-**Datum:** 2026-03-25
-**Commit hash:** bbcfadf
+**Datum:** 2026-03-26
+**Commit hash:** b26745d
 **Branch:** `main`
 **Remote:** https://github.com/christiaensdario-ui/Weekflow.git
-**Gepushed:** ja — 2 commits naar origin/main
+**Gepushed:** ja — 1 commit naar origin/main
 
 ---
 
 ## Samenvatting recente wijzigingen
+
+### Sessie 2026-03-26 — marketing-analyse: vergelijkingspagina, notities, versie-uitklap & contentformats (commit b26745d)
+
+#### Versie-uitklapknop (openingsscherm)
+- Kleine chevron vervangen door prominente "X versies bekijken / Versies verbergen" knop
+- Altijd zichtbaar (niet hover-only), violet border-stijl, pijltje roteert bij uitklap
+
+#### Vergelijkingspagina — CompareScreen
+- **Scorekaartjesrij**: 3 kaartjes (Community %, ER %, Health 0–4) met waarde A vs B, kleurpijl en absoluut delta
+- **Evolutiegrafiek**: absolute waarde-labels op elk datapunt, Y-as start net onder minimum (25% padding), open stippen, unit-bewuste formattering
+- **Gewijzigde velden**: uitklapbaar per sectie (8 groepen: Merkidentiteit, Kanalen, Doelgroep, Strategie, Community, Middelen, SWOT, Markt), badge met veldaantal, gekleurde indicator + label Verbeterd/Gemengd/Verslechterd
+
+#### Notitieveld per sectie
+- `NotitieBadge` component onderaan elke sectie in het dashboard (14 secties: 9 intern + 5 extern)
+- Amber bolletje indicator als notitie aanwezig, uitklapbare textarea, direct opslaan via `onUpdate`
+- Notities opgenomen in PDF-export als geel notitievak (amber stijl) per sectie
+- Notities als aparte uitklapbare groep in versievergelijking
+
+#### Contentformats — modulair systeem
+- Nieuw datamodel: `contentFormats` met `actief[]` + sub-objecten per format
+- **Wizard stap 3**: togglebalk (Sociale media vast aan, Website/Blog/E-mail/Advertenties/Print-Offline schakelbaar)
+- Per geactiveerd format: eigen conditionele SubSection met alle velden + knoppen (SEO, CTA, segmentatie, doelstelling, remarketing...)
+- **Dashboard**: dynamische `interneTabs` — enkel actieve formats krijgen subtab
+- **Vier nieuwe pagina's**: `PageWebsite` (blauw), `PageEmail` (violet), `PageAdvertenties` (amber), `PagePrintOffline` (slate)
+- **Gap detection**: hoge bounce rate (>70%) + lage e-mail open rate (<20%) als automatisch inzicht
 
 ### Sessie 2026-03-25 — marketing-analyse: versiegeschiedenis, organisatiegaps, health score & onboarding (commits 4003615, bbcfadf)
 
