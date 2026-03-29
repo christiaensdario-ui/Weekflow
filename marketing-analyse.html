@@ -443,7 +443,6 @@ h2{font-size:13px;font-weight:700;margin:20px 0 8px;padding:5px 10px;background:
 .grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:8px 0}.sc{border:1px solid #e5e7eb;border-radius:6px;padding:10px}.sc-s{background:#f0fdf4}.sc-w{background:#fef2f2}.sc-o{background:#eff6ff}.sc-t{background:#fffbeb}
 .sl{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:5px}.sc-s .sl{color:#059669}.sc-w .sl{color:#dc2626}.sc-o .sl{color:#2563eb}.sc-t .sl{color:#d97706}
 table{width:100%;border-collapse:collapse;font-size:10px;margin:6px 0}td,th{border:1px solid #e5e7eb;padding:5px 8px;text-align:left;vertical-align:top}th{background:#f9fafb;font-weight:600}
-.pb{page-break-before:always}
 </style></head><body>
 <div class="hdr"><h1>${escHtml(klantnaam||'Naamloos')}</h1><div class="meta">Marketing Analyse · ${dateStr}</div></div>
 <h2>A — Organisatie / structuur</h2>${pdfField('Type label / bedrijf',int.organisatie.labelType)}${pdfField('Geschiedenis',int.organisatie.geschiedenis)}${pdfField('Team / leden',int.organisatie.team)}${pdfField('Rollen en managementstructuur',int.organisatie.rollenManagement)}${pdfField('Werking',int.organisatie.werking)}
@@ -455,7 +454,6 @@ table{width:100%;border-collapse:collapse;font-size:10px;margin:6px 0}td,th{bord
 <h2>H — Community analyse</h2>${pdfField('Interactie in comments',int.communityAnalyse.interactieComments)}${pdfField('Terugkerende fans',int.communityAnalyse.terugkerendeFans)}${pdfField('User generated content',int.communityAnalyse.userGeneratedContent)}${pdfField('DM interacties',int.communityAnalyse.dmInteracties)}${pdfField('Community betrokkenheid',int.communityAnalyse.communityBetrokkenheid)}${pdfField('Publiek of echte community?',int.communityAnalyse.publiefOfCommunity)}
 <h2>I — Middelen</h2>${pdfField('Budget',int.middelen.budget)}${pdfField('Tijd',int.middelen.tijd)}${pdfField('Team',int.middelen.team)}${pdfField('Netwerk',int.middelen.netwerk)}${pdfField('Skills',int.middelen.skills)}
 <h2>J — SWOT</h2><div class="grid2"><div class="sc sc-s"><div class="sl">Strengths</div>${escHtml(int.swot.strengths||'—').replace(/\n/g,'<br>')}</div><div class="sc sc-w"><div class="sl">Weaknesses</div>${escHtml(int.swot.weaknesses||'—').replace(/\n/g,'<br>')}</div><div class="sc sc-o"><div class="sl">Opportunities</div>${escHtml(int.swot.opportunities||'—').replace(/\n/g,'<br>')}</div><div class="sc sc-t"><div class="sl">Threats</div>${escHtml(int.swot.threats||'—').replace(/\n/g,'<br>')}</div></div>
-<div class="pb"></div>
 <h2>A — Concurrentieanalyse</h2>${compTable}
 <h2>B — Samenwerkingen en netwerk</h2>${pdfField('Potentiële partners',ext.samenwerkingen.potentielePartners)}${pdfField('Gatekeepers in de scene',ext.samenwerkingen.gatekeepers)}${pdfField('Bestaande samenwerkingen',ext.samenwerkingen.bestaandeSamenwerkingen)}${pdfField('Ontbrekende samenwerkingen',ext.samenwerkingen.ontbrekendeSamenwerkingen)}
 <h2>C — Markt / scene analyse</h2>${pdfField('Grootte van de scene',ext.marktSceneAnalyse.grootteScene)}${pdfField('Populariteit van het genre',ext.marktSceneAnalyse.populariteitGenre)}${pdfField('Aantal events',ext.marktSceneAnalyse.aantalEvents)}${pdfField('Andere labels / collectieven',ext.marktSceneAnalyse.andereLabels)}${pdfField('Marktverzadiging',ext.marktSceneAnalyse.marktverzadiging)}
@@ -511,7 +509,7 @@ table{width:100%;border-collapse:collapse;font-size:10px;margin:6px 0}td,th{bord
         })(),
       };
       const ORDER = ['samenvatting','organisatie','merkidentiteit','kanalen','doelgroep','content','strategie','community','middelen','swot','concurrentie','samenwerkingen','markt','doelgroepgedrag','trends','personas'];
-      const parts = ORDER.filter(id => sections.has(id)).map((id, i) => (i > 0 ? '<div class="pb"></div>' : '') + sectionHtml[id]);
+      const parts = ORDER.filter(id => sections.has(id)).map((id) => sectionHtml[id]);
       const html = `<!DOCTYPE html><html lang="nl"><head><meta charset="UTF-8"><title>${escHtml(klantnaam||'Analyse')}</title><style>
 *{box-sizing:border-box;margin:0;padding:0}@page{margin:2cm;size:A4}body{font-family:-apple-system,Arial,sans-serif;font-size:11px;color:#1f2937;line-height:1.5}
 .hdr{margin-bottom:24px;padding-bottom:14px;border-bottom:3px solid #1f2937}.hdr h1{font-size:24px;font-weight:800;margin-bottom:3px}.hdr .meta{color:#6b7280;font-size:11px}
@@ -520,7 +518,6 @@ h2{font-size:13px;font-weight:700;margin:20px 0 8px;padding:5px 10px;background:
 .grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:8px 0}.sc{border:1px solid #e5e7eb;border-radius:6px;padding:10px}.sc-s{background:#f0fdf4}.sc-w{background:#fef2f2}.sc-o{background:#eff6ff}.sc-t{background:#fffbeb}
 .sl{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:5px}.sc-s .sl{color:#059669}.sc-w .sl{color:#dc2626}.sc-o .sl{color:#2563eb}.sc-t .sl{color:#d97706}
 table{width:100%;border-collapse:collapse;font-size:10px;margin:6px 0}td,th{border:1px solid #e5e7eb;padding:5px 8px;text-align:left;vertical-align:top}th{background:#f9fafb;font-weight:600}
-.pb{page-break-before:always}
 </style></head><body>
 <div class="hdr"><h1>${escHtml(klantnaam||'Naamloos')}</h1><div class="meta">Marketing Analyse · ${dateStr}</div></div>
 ${parts.join('\n')}</body></html>`;
