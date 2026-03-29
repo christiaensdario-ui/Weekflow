@@ -4451,13 +4451,13 @@ ${parts.join('\n')}</body></html>`;
       const [loadingAI, setLoadingAI] = useState(false);
       const [aiError, setAiError] = useState('');
       const [expandedSections, setExpandedSections] = useState({});
+      const [chartTab, setChartTab] = useState('community');
 
       const vA = allVersions.find(v => v.id === selA) || allVersions[0];
       const vB = allVersions.find(v => v.id === selB) || allVersions[1] || allVersions[0];
 
       const versionLabel = (v) => v.versieNummer != null ? `V${v.versieNummer}` : 'Orig.';
       const toggleSection = (key) => setExpandedSections(s => ({ ...s, [key]: !s[key] }));
-      const [chartTab, setChartTab] = useState('community');
 
       const handleAICompare = async () => {
         if (!apiKey) { setAiError('Voer eerst een API-sleutel in.'); return; }
@@ -4497,12 +4497,13 @@ ${parts.join('\n')}</body></html>`;
       const erVals = chartVersions.map(v => parseEngagementRate(getEngagementRate(v.interneAnalyse?.contentanalyse || {})));
       const healthVals = chartVersions.map(v => computeHealthScore(v).positieven);
 
-      // ER Y-axis: 0 → max + 30% headroom, snapped to a nice step
-      const erDefined = erVals.filter(v => v != null && v > 0);
-      const erRawMax = erDefined.length > 0 ? Math.max(...erDefined) : 5;
-      const erYMax = Math.ceil(erRawMax * 1.3);
+      // ER Y-axis: 0 → hoogste waarde + 5% marge
+      const erDefined = erVals.filter(function(v) { return v != null && v > 0; });
+      const erRawMax = erDefined.length > 0 ? Math.max.apply(null, erDefined) : 5;
+      const erYMax = Math.ceil((erRawMax + erRawMax * 0.05) * 10) / 10 || 5;
       const erStep = erYMax <= 5 ? 1 : erYMax <= 15 ? 2 : erYMax <= 30 ? 5 : erYMax <= 60 ? 10 : 20;
-      const erTicks = Array.from({ length: Math.floor(erYMax / erStep) + 1 }, (_, i) => i * erStep);
+      const erTicks = [];
+      for (var t = 0; t <= erYMax; t = Math.round((t + erStep) * 10) / 10) { erTicks.push(t); }
 
       const typeIcon = { verbeterd: '↑', verslechterd: '↓', nieuw: '→' };
       const typeColor = { verbeterd: 'text-emerald-600', verslechterd: 'text-red-500', nieuw: 'text-blue-500' };
@@ -4681,23 +4682,18 @@ ${parts.join('\n')}</body></html>`;
               <div className="flex items-center justify-between mb-4">
                 <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Evolutie over versies</p>
                 <div className="flex gap-1">
-                  {[
-                    { id: 'community', label: 'Community Score', activeClass: 'bg-violet-50 text-violet-700 border-violet-200' },
-                    { id: 'er',        label: 'Engagement Rate', activeClass: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
-                    { id: 'health',    label: 'Health Score',    activeClass: 'bg-amber-50 text-amber-700 border-amber-200' },
-                  ].map(tab => (
-                    <button
-                      key={tab.id}
-                      onClick={() => setChartTab(tab.id)}
-                      className={`text-[11px] font-medium px-2.5 py-1 rounded-lg border transition-colors ${
-                        chartTab === tab.id
-                          ? tab.activeClass
-                          : 'text-gray-400 bg-white border-gray-200 hover:border-gray-300 hover:text-gray-600'
-                      }`}
-                    >
-                      {tab.label}
-                    </button>
-                  ))}
+                  <button
+                    onClick={() => setChartTab('community')}
+                    className={`text-[11px] font-medium px-2.5 py-1 rounded-lg border transition-colors ${chartTab === 'community' ? 'bg-violet-50 text-violet-700 border-violet-200' : 'text-gray-400 bg-white border-gray-200 hover:border-gray-300 hover:text-gray-600'}`}
+                  >Community Score</button>
+                  <button
+                    onClick={() => setChartTab('er')}
+                    className={`text-[11px] font-medium px-2.5 py-1 rounded-lg border transition-colors ${chartTab === 'er' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'text-gray-400 bg-white border-gray-200 hover:border-gray-300 hover:text-gray-600'}`}
+                  >Engagement Rate</button>
+                  <button
+                    onClick={() => setChartTab('health')}
+                    className={`text-[11px] font-medium px-2.5 py-1 rounded-lg border transition-colors ${chartTab === 'health' ? 'bg-amber-50 text-amber-700 border-amber-200' : 'text-gray-400 bg-white border-gray-200 hover:border-gray-300 hover:text-gray-600'}`}
+                  >Health Score</button>
                 </div>
               </div>
 
@@ -4706,10 +4702,11 @@ ${parts.join('\n')}</body></html>`;
                   values={communityVals}
                   versionLabels={chartLabels}
                   color="#8b5cf6"
-                  yMin={0} yMax={100}
+                  yMin={0}
+                  yMax={100}
                   yTicks={[0, 25, 50, 75, 100]}
-                  fmtYTick={v => `${v}%`}
-                  fmtLabel={v => `${Math.round(v * 10) / 10}%`}
+                  fmtYTick={function(v) { return v + '%'; }}
+                  fmtLabel={function(v) { return (Math.round(v * 10) / 10) + '%'; }}
                 />
               )}
               {chartTab === 'er' && (
@@ -4717,10 +4714,11 @@ ${parts.join('\n')}</body></html>`;
                   values={erVals}
                   versionLabels={chartLabels}
                   color="#10b981"
-                  yMin={0} yMax={erYMax}
+                  yMin={0}
+                  yMax={erYMax}
                   yTicks={erTicks}
-                  fmtYTick={v => `${v}%`}
-                  fmtLabel={v => `${Math.round(v * 100) / 100}%`}
+                  fmtYTick={function(v) { return v + '%'; }}
+                  fmtLabel={function(v) { return (Math.round(v * 100) / 100) + '%'; }}
                 />
               )}
               {chartTab === 'health' && (
@@ -4728,10 +4726,11 @@ ${parts.join('\n')}</body></html>`;
                   values={healthVals}
                   versionLabels={chartLabels}
                   color="#f59e0b"
-                  yMin={0} yMax={4}
+                  yMin={0}
+                  yMax={4}
                   yTicks={[0, 1, 2, 3, 4]}
-                  fmtYTick={v => ['F', 'D', 'C', 'B', 'A'][v] ?? ''}
-                  fmtLabel={v => `${['F', 'D', 'C', 'B', 'A'][v] ?? '?'} (${v}/4)`}
+                  fmtYTick={function(v) { var letters = ['F','D','C','B','A']; return letters[v] || String(v); }}
+                  fmtLabel={function(v) { var letters = ['F','D','C','B','A']; return (letters[v] || '?') + ' (' + v + '/4)'; }}
                 />
               )}
             </div>
