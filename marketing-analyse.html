@@ -4497,13 +4497,58 @@ ${parts.join('\n')}</body></html>`;
       const erVals = chartVersions.map(v => parseEngagementRate(getEngagementRate(v.interneAnalyse?.contentanalyse || {})));
       const healthVals = chartVersions.map(v => computeHealthScore(v).positieven);
 
-      // ER Y-axis: 0 → hoogste waarde + 5% marge
-      const erDefined = erVals.filter(function(v) { return v != null && v > 0; });
-      const erRawMax = erDefined.length > 0 ? Math.max.apply(null, erDefined) : 5;
-      const erYMax = Math.ceil((erRawMax + erRawMax * 0.05) * 10) / 10 || 5;
-      const erStep = erYMax <= 5 ? 1 : erYMax <= 15 ? 2 : erYMax <= 30 ? 5 : erYMax <= 60 ? 10 : 20;
-      const erTicks = [];
-      for (var t = 0; t <= erYMax; t = Math.round((t + erStep) * 10) / 10) { erTicks.push(t); }
+      // Auto-scale Y-axis: min = lowest − 15% van het bereik, max = hoogste + 15%
+      // hardMin/hardMax: harde grenzen die nooit overschreden worden (bijv. 0 voor %)
+      // integerTicks: true → ticks alleen op gehele getallen (Health score A-F)
+      function autoAxis(vals, hardMin, hardMax, integerTicks) {
+        var defined = vals.filter(function(v) { return v != null; });
+        if (defined.length === 0) {
+          var fb = hardMax !== null && hardMax !== undefined ? hardMax : 10;
+          return { yMin: hardMin || 0, yMax: fb, yTicks: [hardMin || 0, fb / 2, fb] };
+        }
+        var rawMin = Math.min.apply(null, defined);
+        var rawMax = Math.max.apply(null, defined);
+        var span = rawMax - rawMin;
+        if (span === 0) { span = Math.max(rawMax * 0.2, integerTicks ? 2 : 1); }
+        var margin = span * 0.15;
+        var axMin = rawMin - margin;
+        var axMax = rawMax + margin;
+        if (hardMin !== null && hardMin !== undefined) axMin = Math.max(axMin, hardMin);
+        if (hardMax !== null && hardMax !== undefined) axMax = Math.min(axMax, hardMax);
+        axMin = Math.round(axMin * 100) / 100;
+        axMax = Math.round(axMax * 100) / 100;
+        var ticks = [];
+        if (integerTicks) {
+          var lo = Math.max(hardMin !== null && hardMin !== undefined ? hardMin : -Infinity, Math.floor(axMin));
+          var hi = Math.min(hardMax !== null && hardMax !== undefined ? hardMax :  Infinity, Math.ceil(axMax));
+          // Minimaal 2 ticks tonen voor leesbaarheid
+          if (hi - lo < 2) { lo = Math.max(hardMin !== null && hardMin !== undefined ? hardMin : lo - 1, lo - 1); hi = Math.min(hardMax !== null && hardMax !== undefined ? hardMax : hi + 1, hi + 1); }
+          axMin = lo; axMax = hi;
+          for (var i = lo; i <= hi; i++) ticks.push(i);
+        } else {
+          var range = axMax - axMin || 1;
+          var rawStep = range / 4;
+          var mag = Math.pow(10, Math.floor(Math.log(rawStep) / Math.LN10));
+          var niceArr = [1, 2, 2.5, 5, 10];
+          var step = mag * 10;
+          for (var j = 0; j < niceArr.length; j++) {
+            if (mag * niceArr[j] >= rawStep) { step = mag * niceArr[j]; break; }
+          }
+          var first = Math.ceil(axMin / step) * step;
+          first = Math.round(first * 1000) / 1000;
+          for (var k = 0; k <= 20; k++) {
+            var tk = Math.round((first + k * step) * 1000) / 1000;
+            if (tk > axMax + step * 0.01) break;
+            ticks.push(tk);
+          }
+        }
+        if (ticks.length === 0) ticks = [axMin, axMax];
+        return { yMin: axMin, yMax: axMax, yTicks: ticks };
+      }
+
+      var communityAxis = autoAxis(communityVals, 0, 100, false);
+      var erAxis        = autoAxis(erVals,        0, null, false);
+      var healthAxis    = autoAxis(healthVals,     0, 4,    true);
 
       const typeIcon = { verbeterd: '↑', verslechterd: '↓', nieuw: '→' };
       const typeColor = { verbeterd: 'text-emerald-600', verslechterd: 'text-red-500', nieuw: 'text-blue-500' };
@@ -4702,10 +4747,10 @@ ${parts.join('\n')}</body></html>`;
                   values={communityVals}
                   versionLabels={chartLabels}
                   color="#8b5cf6"
-                  yMin={0}
-                  yMax={100}
-                  yTicks={[0, 25, 50, 75, 100]}
-                  fmtYTick={function(v) { return v + '%'; }}
+                  yMin={communityAxis.yMin}
+                  yMax={communityAxis.yMax}
+                  yTicks={communityAxis.yTicks}
+                  fmtYTick={function(v) { return (Math.round(v * 10) / 10) + '%'; }}
                   fmtLabel={function(v) { return (Math.round(v * 10) / 10) + '%'; }}
                 />
               )}
@@ -4714,10 +4759,10 @@ ${parts.join('\n')}</body></html>`;
                   values={erVals}
                   versionLabels={chartLabels}
                   color="#10b981"
-                  yMin={0}
-                  yMax={erYMax}
-                  yTicks={erTicks}
-                  fmtYTick={function(v) { return v + '%'; }}
+                  yMin={erAxis.yMin}
+                  yMax={erAxis.yMax}
+                  yTicks={erAxis.yTicks}
+                  fmtYTick={function(v) { return (Math.round(v * 10) / 10) + '%'; }}
                   fmtLabel={function(v) { return (Math.round(v * 100) / 100) + '%'; }}
                 />
               )}
@@ -4726,9 +4771,9 @@ ${parts.join('\n')}</body></html>`;
                   values={healthVals}
                   versionLabels={chartLabels}
                   color="#f59e0b"
-                  yMin={0}
-                  yMax={4}
-                  yTicks={[0, 1, 2, 3, 4]}
+                  yMin={healthAxis.yMin}
+                  yMax={healthAxis.yMax}
+                  yTicks={healthAxis.yTicks}
                   fmtYTick={function(v) { var letters = ['F','D','C','B','A']; return letters[v] || String(v); }}
                   fmtLabel={function(v) { var letters = ['F','D','C','B','A']; return (letters[v] || '?') + ' (' + v + '/4)'; }}
                 />
