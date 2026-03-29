@@ -234,13 +234,26 @@
 
     function getCompetitorEngagementRate(c) {
       if (!c) return '';
-      const toNum = v => parseFloat(String(v || '').replace(/[^\d.,]/g,'').replace(',','.')) || 0;
+      const toNum = v => {
+        const s = String(v || '').replace(/[^\d.,]/g, '');
+        if (!s) return 0;
+        if (/^\d{1,3}(\.\d{3})+$/.test(s)) return parseFloat(s.replace(/\./g, '')) || 0;
+        if (/^\d{1,3}(\.\d{3})+,\d*$/.test(s)) return parseFloat(s.replace(/\./g, '').replace(',', '.')) || 0;
+        return parseFloat(s.replace(',', '.')) || 0;
+      };
       const likes    = toNum(c.engagementLikes);
       const comments = toNum(c.engagementComments);
       const volgers  = toNum(c.engagementVolgers);
       if (volgers > 0 && (likes + comments) > 0)
         return (((likes + comments) / volgers) * 100).toFixed(2) + '%';
       return '';
+    }
+
+    function validateEngagementRate(erStr) {
+      if (!erStr) return null;
+      const n = parseEngagementRate(erStr);
+      if (n !== null && n > 100) return 'Controleer je ingevoerde waarden — een engagement rate boven 100% is niet mogelijk.';
+      return null;
     }
 
     function computeHealthScore(analysis) {
@@ -416,7 +429,7 @@ Voor "vergelijking": geef maximaal 3 items als array. Elk item heeft:
       const { interneAnalyse: int, externeAnalyse: ext, klantnaam, datum } = analysis;
       const ca = int.contentanalyse;
       const competitors = Array.isArray(ext.concurrentieanalyse) ? ext.concurrentieanalyse : [ext.concurrentieanalyse || {}];
-      const compErVal = (c) => { const l=parseFloat(String(c.engagementLikes||'').replace(',','.'));const cm=parseFloat(String(c.engagementComments||'').replace(',','.'));const v=parseFloat(String(c.engagementVolgers||'').replace(',','.')); return v>0&&(l+cm)>0?((l+cm)/v*100).toFixed(2)+'% (publieke data)':'—'; };
+      const compErVal = (c) => { const er = getCompetitorEngagementRate(c); if (!er) return '—'; const n = parseEngagementRate(er); if (n !== null && n > 100) return 'Ongeldige waarden (>100%)'; return er + ' (publieke data)'; };
       const compRows = [['Positionering','positionering'],['Branding','branding'],['Content','content'],['Community','community'],['Differentiatie','differentiatie'],['Wat doen zij NIET?','watDoenZijNiet']];
       const compPostsVal = (c) => { const n=Number(c.postsAantal); return n>0?`≈ ${(n/4).toFixed(1).replace('.0','')} per week (${n} in 4 weken)`:'—'; };
       const compStoriesVal = (c) => { const n=Number(c.storiesAantal); return n>0?`≈ ${(n/4).toFixed(1).replace('.0','')} per week (${n} in 4 weken)`:'—'; };
@@ -462,7 +475,7 @@ table{width:100%;border-collapse:collapse;font-size:10px;margin:6px 0}td,th{bord
       const ca = int.contentanalyse;
       const dateStr = new Date(datum).toLocaleDateString('nl-NL', { day: 'numeric', month: 'long', year: 'numeric' });
       const competitors = Array.isArray(ext.concurrentieanalyse) ? ext.concurrentieanalyse : [ext.concurrentieanalyse || {}];
-      const compErVal = (c) => { const l=parseFloat(String(c.engagementLikes||'').replace(',','.'));const cm=parseFloat(String(c.engagementComments||'').replace(',','.'));const v=parseFloat(String(c.engagementVolgers||'').replace(',','.')); return v>0&&(l+cm)>0?((l+cm)/v*100).toFixed(2)+'% (publieke data)':'—'; };
+      const compErVal = (c) => { const er = getCompetitorEngagementRate(c); if (!er) return '—'; const n = parseEngagementRate(er); if (n !== null && n > 100) return 'Ongeldige waarden (>100%)'; return er + ' (publieke data)'; };
       const compPostsVal = (c) => { const n=Number(c.postsAantal); return n>0?`≈ ${(n/4).toFixed(1).replace('.0','')} per week (${n} in 4 weken)`:'—'; };
       const compStoriesVal = (c) => { const n=Number(c.storiesAantal); return n>0?`≈ ${(n/4).toFixed(1).replace('.0','')} per week (${n} in 4 weken)`:'—'; };
       const compRows = [['Positionering','positionering'],['Branding','branding'],['Content','content'],['Community','community'],['Differentiatie','differentiatie'],['Wat doen zij NIET?','watDoenZijNiet']];
@@ -861,7 +874,8 @@ ${parts.join('\n')}</body></html>`;
     function PerformancePanel({ data }) {
       const erStr = getEngagementRate(data);
       const erNum = parseEngagementRate(erStr);
-      const erc = erStr ? engagementRateColor(erNum) : engagementRateColor(null);
+      const erError = validateEngagementRate(erStr);
+      const erc = erStr && !erError ? engagementRateColor(erNum) : engagementRateColor(null);
       const erMissing = !erStr;
       const erNote = data.insightsAccess === 'ja'
         ? 'Berekend via Instagram Insights (bereik).'
@@ -893,20 +907,22 @@ ${parts.join('\n')}</body></html>`;
               </div>
             ))}
           </div>
-          <div className={`${erc.bg} border ${erc.border} rounded-xl p-4 flex items-center justify-between`}>
-            <div>
+          <div className={`${erError ? 'bg-red-50 border-red-200' : `${erc.bg} ${erc.border}`} border rounded-xl p-4 flex items-center justify-between`}>
+            <div className="flex-1 min-w-0">
               <div className="flex items-center gap-1 mb-1">
                 <p className="text-xs font-medium text-gray-500">Engagement rate</p>
                 <Tooltip text="Onder 2% = laag, 2–5% = gemiddeld, boven 5% = goed — gebaseerd op industrie benchmark voor sociale media." />
               </div>
               {erMissing
                 ? <p className="text-sm text-gray-400 italic">Vul het vereiste veld in om de engagement rate te berekenen.</p>
-                : <p className={`text-2xl font-bold ${erc.text}`}>{erStr || '—'}</p>
+                : erError
+                  ? <p className="text-sm font-medium text-red-600">{erError}</p>
+                  : <p className={`text-2xl font-bold ${erc.text}`}>{erStr || '—'}</p>
               }
-              {!erMissing && erNote && <p className="text-xs text-gray-400 mt-1 italic">{erNote}</p>}
+              {!erMissing && !erError && erNote && <p className="text-xs text-gray-400 mt-1 italic">{erNote}</p>}
             </div>
-            {!erMissing && erc.label && (
-              <span className={`text-xs font-semibold px-2.5 py-1 rounded-full border ${erc.bg} ${erc.text} ${erc.border}`}>
+            {!erMissing && !erError && erc.label && (
+              <span className={`text-xs font-semibold px-2.5 py-1 rounded-full border ${erc.bg} ${erc.text} ${erc.border} shrink-0 ml-3`}>
                 {erc.label}
               </span>
             )}
@@ -4019,6 +4035,13 @@ ${parts.join('\n')}</body></html>`;
                       {(() => {
                         const er = getEngagementRate(int.contentanalyse);
                         if (!er) return null;
+                        const erErr = validateEngagementRate(er);
+                        if (erErr) return (
+                          <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 mt-2">
+                            <p className="text-xs font-semibold text-red-600 mb-0.5">Engagement rate — ongeldige waarden</p>
+                            <p className="text-xs text-red-500">{erErr}</p>
+                          </div>
+                        );
                         const erNum = parseEngagementRate(er);
                         const erc = engagementRateColor(erNum);
                         return (
@@ -4115,14 +4138,14 @@ ${parts.join('\n')}</body></html>`;
                         <GroupLabel label="Performance (gemiddelden)" />
                         <div className="grid grid-cols-2 gap-4 mb-4 mt-3">
                           {[
-                            { label: 'Gemiddelde likes',    key: 'engagementLikes',    placeholder: 'bijv. 120'  },
-                            { label: 'Gemiddelde comments', key: 'engagementComments', placeholder: 'bijv. 15'   },
-                            { label: 'Gemiddelde shares',   key: 'engagementShares',   placeholder: 'bijv. 5'    },
-                            { label: 'Aantal volgers',      key: 'engagementVolgers',  placeholder: 'bijv. 5000' },
+                            { label: 'Gemiddelde likes',    key: 'engagementLikes',    placeholder: 'bijv. 120 of 1.200'  },
+                            { label: 'Gemiddelde comments', key: 'engagementComments', placeholder: 'bijv. 15'             },
+                            { label: 'Gemiddelde shares',   key: 'engagementShares',   placeholder: 'bijv. 5'              },
+                            { label: 'Aantal volgers',      key: 'engagementVolgers',  placeholder: 'bijv. 5.000 of 5000' },
                           ].map(({ label, key, placeholder }) => (
                             <div key={key}>
                               <label className="block text-sm font-medium text-gray-700 mb-1">{label}</label>
-                              <input type="number" min="0"
+                              <input type="text" inputMode="numeric"
                                 className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 bg-white focus:outline-none focus:ring-2 focus:ring-gray-300 transition"
                                 placeholder={placeholder} value={c[key] || ''}
                                 onChange={e => setConcurrent(i, key, e.target.value)}
@@ -4133,6 +4156,13 @@ ${parts.join('\n')}</body></html>`;
                         {(() => {
                           const er = getCompetitorEngagementRate(c);
                           if (!er) return null;
+                          const erErr = validateEngagementRate(er);
+                          if (erErr) return (
+                            <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 mb-4">
+                              <p className="text-xs font-semibold text-red-600 mb-0.5">Engagement rate — ongeldige waarden</p>
+                              <p className="text-xs text-red-500">{erErr}</p>
+                            </div>
+                          );
                           const erNum = parseEngagementRate(er);
                           const erc = engagementRateColor(erNum);
                           return (
