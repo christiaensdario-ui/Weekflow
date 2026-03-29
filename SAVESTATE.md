@@ -1,8 +1,8 @@
 # Marketing Analyse App — Savestate
 
 ## Laatste opslag
-**Datum:** 2026-03-26
-**Commit hash:** b26745d
+**Datum:** 2026-03-28
+**Commit hash:** 9564e25
 **Branch:** `main`
 **Remote:** https://github.com/christiaensdario-ui/Weekflow.git
 **Gepushed:** ja — 1 commit naar origin/main
@@ -10,6 +10,41 @@
 ---
 
 ## Samenvatting recente wijzigingen
+
+### Sessie 2026-03-28 — marketing-analyse: PDF export pagina-einden verwijderd (commit 9564e25)
+
+#### PDF export fix
+- Verwijderd: `.pb{page-break-before:always}` uit CSS van zowel `exportPDF` als `exportPDFFiltered`
+- Verwijderd: `<div class="pb"></div>` tussen SWOT en concurrentieanalyse in `exportPDF`
+- Verwijderd: `(i > 0 ? '<div class="pb"></div>' : '') +` in `exportPDFFiltered` parts mapping
+- Content loopt nu door van boven naar onder; pagina-einden alleen nog op basis van natuurlijke overflow
+- Behouden: `page-break-inside:avoid` op `.f` (velden), persona cards en `pdfNote` blokken
+
+---
+
+### Sessie 2026-03-29 — marketing-analyse: versievergelijking bugfixes & tabbed grafieken (commit ba6441d)
+
+#### Grafiek opsplitsing in drie tabs
+- `SimpleLineChart` volledig vervangen door nieuwe `MetricLineChart` component
+- Drie tabs boven de grafiek: **Community Score**, **Engagement Rate**, **Health Score**
+- Elke tab toont een aparte grafiek met eigen Y-as schaal:
+  - Community: vaste schaal 0–100% met ticks op 0/25/50/75/100
+  - Engagement Rate: dynamische schaal (max + 30% marge), automatische stapgrootte (1/2/5/10/20%)
+  - Health Score: schaal 0–4, Y-as toont letters F/D/C/B/A, labels als `B (3/4)`
+- Grote datapuntlabels (11px, vet, in kleur van lijn) met exacte waarde per versie
+- Eerste tab "Community Score" standaard actief
+
+#### Engagement rate bug bij kopiëren
+- `toNum()` in `getEngagementRate` herkent nu Nederlandse duizendtallenscheider (punt)
+- `"1.500"` wordt nu correct geparsed als 1500 (was: 1.5), zodat ER niet meer > 1000% geeft
+
+#### Terugknop naar versievergelijking
+- Contextuele paarse balk **"← Terug naar vergelijking"** bovenaan dashboard
+- Alleen zichtbaar wanneer dashboard geopend werd via "Bekijk Vx volledig" vanuit vergelijking
+- Keert terug met eerder geselecteerde versies (selA/selB) nog actief in de selectors
+- Gewone ← (naar home) wist de compare-state; terugknop blijft in sticky header
+
+---
 
 ### Sessie 2026-03-26 — marketing-analyse: vergelijkingspagina, notities, versie-uitklap & contentformats (commit b26745d)
 
