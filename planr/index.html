@@ -1,0 +1,889 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <meta name="theme-color" content="#6366f1" />
+  <meta name="description" content="Persoonlijke weekplanner" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Planr" />
+  <link rel="manifest" href="manifest.json" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <title>Planr</title>
+
+  <!-- Tailwind Play CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: { sans: ['Inter', 'system-ui', 'sans-serif'] },
+        },
+      },
+      // Safelist alle dynamische kleurklassen zodat Tailwind CDN ze altijd genereert
+      safelist: [
+        'bg-blue-500','bg-green-500','bg-red-500','bg-yellow-400',
+        'bg-purple-500','bg-orange-500','bg-pink-500','bg-gray-400',
+        'border-blue-600','border-green-600','border-red-600','border-yellow-500',
+        'border-purple-600','border-orange-600','border-pink-600','border-gray-500',
+        'bg-blue-500/20','bg-green-500/20','bg-red-500/20','bg-yellow-400/20',
+        'bg-purple-500/20','bg-orange-500/20','bg-pink-500/20','bg-gray-400/20',
+        'text-gray-900',
+      ],
+    };
+  </script>
+
+  <!-- React 18 -->
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <!-- Babel standalone voor JSX zonder buildstap -->
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+  <style>
+    *, *::before, *::after { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    html, body { height: 100%; overflow: hidden; font-family: 'Inter', system-ui, sans-serif; background: #0f172a; color: #fff; }
+    body { overscroll-behavior: none; margin: 0; }
+    #root { height: 100%; }
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #334155; border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: #475569; }
+    .pb-safe { padding-bottom: env(safe-area-inset-bottom, 0px); }
+    /* Verberg native time-input arrow in sommige browsers */
+    input[type="time"]::-webkit-calendar-picker-indicator { filter: invert(1); opacity: 0.5; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+<script type="text/babel">
+const { useState, useEffect, useCallback, useRef } = React;
+
+// ═══════════════════════════════════════════════════════════════
+//  CONSTANTEN
+// ═══════════════════════════════════════════════════════════════
+
+const START_UUR     = 6;
+const EIND_UUR      = 23;
+const PX_PER_UUR    = 64;
+const PX_PER_MIN    = PX_PER_UUR / 60;
+const TOTAAL_HOOGTE = (EIND_UUR - START_UUR) * PX_PER_UUR; // 1088px
+const UUR_LABELS    = Array.from({ length: EIND_UUR - START_UUR + 1 }, (_, i) => START_UUR + i);
+const KLEUREN       = ['blauw','groen','rood','geel','paars','oranje','roze','grijs'];
+const DUUR_OPTIES   = [15, 30, 45, 60, 90, 120];
+
+// ═══════════════════════════════════════════════════════════════
+//  KLEUR CONFIG
+// ═══════════════════════════════════════════════════════════════
+
+const KLEUR_CONFIG = {
+  blauw:  { bg:'bg-blue-500',   text:'text-white',     border:'border-blue-600',   light:'bg-blue-500/20',   dot:'bg-blue-500'   },
+  groen:  { bg:'bg-green-500',  text:'text-white',     border:'border-green-600',  light:'bg-green-500/20',  dot:'bg-green-500'  },
+  rood:   { bg:'bg-red-500',    text:'text-white',     border:'border-red-600',    light:'bg-red-500/20',    dot:'bg-red-500'    },
+  geel:   { bg:'bg-yellow-400', text:'text-gray-900',  border:'border-yellow-500', light:'bg-yellow-400/20', dot:'bg-yellow-400' },
+  paars:  { bg:'bg-purple-500', text:'text-white',     border:'border-purple-600', light:'bg-purple-500/20', dot:'bg-purple-500' },
+  oranje: { bg:'bg-orange-500', text:'text-white',     border:'border-orange-600', light:'bg-orange-500/20', dot:'bg-orange-500' },
+  roze:   { bg:'bg-pink-500',   text:'text-white',     border:'border-pink-600',   light:'bg-pink-500/20',   dot:'bg-pink-500'   },
+  grijs:  { bg:'bg-gray-400',   text:'text-white',     border:'border-gray-500',   light:'bg-gray-400/20',   dot:'bg-gray-400'   },
+};
+
+// ═══════════════════════════════════════════════════════════════
+//  TIJD UTILITIES
+// ═══════════════════════════════════════════════════════════════
+
+function minutenNaarTop(min)           { return (min - START_UUR * 60) * PX_PER_MIN; }
+function duurNaarHoogte(dur)           { return dur * PX_PER_MIN; }
+function topNaarMinuten(top)           { return Math.round(((top / PX_PER_MIN) + START_UUR * 60) / 15) * 15; }
+function minutenNaarTijdString(min)    { return `${String(Math.floor(min/60)).padStart(2,'0')}:${String(min%60).padStart(2,'0')}`; }
+function tijdStringNaarMinuten(s)      { const [h,m] = s.split(':').map(Number); return h*60+m; }
+function clampMinuten(min, dur = 60)   { return Math.max(START_UUR*60, Math.min(EIND_UUR*60 - dur, min)); }
+function duurLabel(d)                  { return d < 60 ? `${d} min` : d === 60 ? '1 uur' : `${d/60} uur`; }
+
+// ═══════════════════════════════════════════════════════════════
+//  WEEK UTILITIES
+// ═══════════════════════════════════════════════════════════════
+
+const DAGEN_KORT = ['Ma','Di','Wo','Do','Vr','Za','Zo'];
+const MAANDEN    = ['jan','feb','mrt','apr','mei','jun','jul','aug','sep','okt','nov','dec'];
+
+function getMaandag(d) {
+  const r = new Date(d);
+  const dag = r.getDay();
+  r.setDate(r.getDate() + (dag === 0 ? -6 : 1 - dag));
+  r.setHours(0,0,0,0);
+  return r;
+}
+function getWeekDagen(ma) {
+  return Array.from({length:7}, (_,i) => { const d = new Date(ma); d.setDate(d.getDate()+i); return d; });
+}
+function datumNaarString(d) {
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+function dagNaamKort(d)  { const n = d.getDay(); return DAGEN_KORT[n===0?6:n-1]; }
+function dagNummer(d)    { return d.getDate(); }
+function isVandaag(d)    { return datumNaarString(d) === datumNaarString(new Date()); }
+function voegDagenToe(d, n) { const r = new Date(d); r.setDate(r.getDate()+n); return r; }
+function weeknummer(d) {
+  const u = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+  const dn = u.getUTCDay() || 7;
+  u.setUTCDate(u.getUTCDate() + 4 - dn);
+  const ys = new Date(Date.UTC(u.getUTCFullYear(),0,1));
+  return Math.ceil((((u-ys)/86400000)+1)/7);
+}
+function weekLabel(ma) {
+  const zo = new Date(ma); zo.setDate(zo.getDate()+6);
+  return `${ma.getDate()} ${MAANDEN[ma.getMonth()]} – ${zo.getDate()} ${MAANDEN[zo.getMonth()]} ${zo.getFullYear()}`;
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  LOCAL STORAGE
+// ═══════════════════════════════════════════════════════════════
+
+function load(key, def) {
+  try { const v = localStorage.getItem(key); return v ? JSON.parse(v) : def; } catch { return def; }
+}
+function save(key, val) {
+  try { localStorage.setItem(key, JSON.stringify(val)); } catch {}
+}
+function genId() { return Math.random().toString(36).slice(2) + Date.now().toString(36); }
+
+// ═══════════════════════════════════════════════════════════════
+//  STORE HOOK
+// ═══════════════════════════════════════════════════════════════
+
+function usePlanrStore() {
+  const [activiteiten, setActiviteiten] = useState(() => load('planr_activiteiten', []));
+  const [afspraken,    setAfspraken]    = useState(() => load('planr_afspraken', []));
+  const [templates,    setTemplates]    = useState(() => load('planr_templates', []));
+
+  useEffect(() => save('planr_activiteiten', activiteiten), [activiteiten]);
+  useEffect(() => save('planr_afspraken',    afspraken),    [afspraken]);
+  useEffect(() => save('planr_templates',    templates),    [templates]);
+
+  const addActiviteit    = useCallback(d => setActiviteiten(p => [...p, {...d, id:genId()}]), []);
+  const removeActiviteit = useCallback(id => setActiviteiten(p => p.filter(a => a.id!==id)), []);
+  const addAfspraak      = useCallback(d => setAfspraken(p => [...p, {...d, id:genId()}]), []);
+  const updateAfspraak   = useCallback((id,u) => setAfspraken(p => p.map(a => a.id===id?{...a,...u}:a)), []);
+  const removeAfspraak   = useCallback(id => setAfspraken(p => p.filter(a => a.id!==id)), []);
+
+  return { activiteiten, afspraken, templates, addActiviteit, removeActiviteit, addAfspraak, updateAfspraak, removeAfspraak };
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  MODAL OVERLAY
+// ═══════════════════════════════════════════════════════════════
+
+function ModalOverlay({ onSluit, children }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4" onClick={onSluit}>
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
+      <div className="relative z-10 w-full sm:max-w-sm bg-slate-800 rounded-t-2xl sm:rounded-2xl shadow-2xl border border-slate-700"
+           onClick={e => e.stopPropagation()}>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  NIEUWE ACTIVITEIT MODAL
+// ═══════════════════════════════════════════════════════════════
+
+function NieuweActiviteitModal({ onOpslaan, onSluit }) {
+  const [naam, setNaam]               = useState('');
+  const [kleur, setKleur]             = useState('blauw');
+  const [duurMinuten, setDuurMinuten] = useState(60);
+
+  function opslaan() {
+    if (!naam.trim()) return;
+    onOpslaan({ naam: naam.trim(), kleur, duurMinuten });
+    onSluit();
+  }
+
+  return (
+    <ModalOverlay onSluit={onSluit}>
+      <div className="p-5 space-y-4">
+        <div className="flex items-center justify-between">
+          <h2 className="text-base font-semibold">Nieuwe activiteit</h2>
+          <button onClick={onSluit} className="text-slate-500 hover:text-white text-xl leading-none">×</button>
+        </div>
+
+        <div>
+          <label className="text-xs text-slate-400 block mb-1">Naam</label>
+          <input autoFocus type="text" value={naam} onChange={e=>setNaam(e.target.value)}
+            onKeyDown={e=>e.key==='Enter'&&opslaan()}
+            placeholder="bijv. Sport, Werk, Studie…"
+            className="w-full bg-slate-700 text-white text-sm rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-indigo-500 placeholder:text-slate-500" />
+        </div>
+
+        <div>
+          <label className="text-xs text-slate-400 block mb-2">Kleur</label>
+          <div className="flex gap-2 flex-wrap">
+            {KLEUREN.map(k => (
+              <button key={k} onClick={()=>setKleur(k)} title={k}
+                className={`w-7 h-7 rounded-full transition-all ${KLEUR_CONFIG[k].bg} ${kleur===k?'ring-2 ring-white ring-offset-2 ring-offset-slate-800 scale-110':'hover:scale-105'}`} />
+            ))}
+          </div>
+        </div>
+
+        <div>
+          <label className="text-xs text-slate-400 block mb-2">Duur</label>
+          <div className="flex gap-2 flex-wrap">
+            {DUUR_OPTIES.map(d => (
+              <button key={d} onClick={()=>setDuurMinuten(d)}
+                className={`px-3 py-1 rounded-lg text-xs font-medium transition-colors ${duurMinuten===d?'bg-indigo-600 text-white':'bg-slate-700 text-slate-400 hover:bg-slate-600'}`}>
+                {duurLabel(d)}
+              </button>
+            ))}
+          </div>
+          <div className="mt-2 flex items-center gap-2">
+            <input type="number" min={15} max={480} step={15} value={duurMinuten}
+              onChange={e=>setDuurMinuten(Math.max(15,Math.min(480,Number(e.target.value))))}
+              className="w-20 bg-slate-700 text-white text-xs rounded-lg px-2 py-1.5 outline-none focus:ring-2 focus:ring-indigo-500" />
+            <span className="text-xs text-slate-500">minuten (vrij)</span>
+          </div>
+        </div>
+
+        <div className="flex gap-2 pt-1">
+          <button onClick={onSluit} className="flex-1 py-2 bg-slate-700 hover:bg-slate-600 rounded-xl text-sm font-medium transition-colors">Annuleer</button>
+          <button onClick={opslaan} disabled={!naam.trim()}
+            className="flex-1 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed rounded-xl text-sm font-medium transition-colors">
+            Opslaan
+          </button>
+        </div>
+      </div>
+    </ModalOverlay>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  NIEUWE AFSPRAAK MODAL
+// ═══════════════════════════════════════════════════════════════
+
+function NieuweAfspraakModal({ datum, startMinuten, onOpslaan, onSluit }) {
+  const [naam, setNaam]   = useState('');
+  const [kleur, setKleur] = useState('blauw');
+  const [duur, setDuur]   = useState(60);
+  const [start, setStart] = useState(startMinuten);
+
+  function opslaan() {
+    if (!naam.trim()) return;
+    onOpslaan({ naam:naam.trim(), kleur, datum, startMinuten:clampMinuten(start,duur), duurMinuten:duur });
+    onSluit();
+  }
+
+  const [jr,mn,dg] = datum.split('-').map(Number);
+
+  return (
+    <ModalOverlay onSluit={onSluit}>
+      <div className="p-5 space-y-4">
+        <div className="flex items-center justify-between">
+          <h2 className="text-base font-semibold">Nieuwe afspraak</h2>
+          <button onClick={onSluit} className="text-slate-500 hover:text-white text-xl leading-none">×</button>
+        </div>
+        <p className="text-xs text-slate-500 -mt-2">📅 {dg}/{mn}/{jr}</p>
+
+        <div>
+          <label className="text-xs text-slate-400 block mb-1">Naam</label>
+          <input autoFocus type="text" value={naam} onChange={e=>setNaam(e.target.value)}
+            onKeyDown={e=>e.key==='Enter'&&opslaan()}
+            placeholder="bijv. Meeting, Lunch, Gym…"
+            className="w-full bg-slate-700 text-white text-sm rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-indigo-500 placeholder:text-slate-500" />
+        </div>
+
+        <div className="flex gap-3">
+          <div className="flex-1">
+            <label className="text-xs text-slate-400 block mb-1">Starttijd</label>
+            <input type="time" value={minutenNaarTijdString(start)} onChange={e=>setStart(tijdStringNaarMinuten(e.target.value))}
+              className="w-full bg-slate-700 text-white text-sm rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-indigo-500" />
+          </div>
+          <div className="flex-1">
+            <label className="text-xs text-slate-400 block mb-1">Duur</label>
+            <select value={duur} onChange={e=>setDuur(Number(e.target.value))}
+              className="w-full bg-slate-700 text-white text-sm rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-indigo-500">
+              {DUUR_OPTIES.map(d => <option key={d} value={d}>{duurLabel(d)}</option>)}
+            </select>
+          </div>
+        </div>
+
+        <div>
+          <label className="text-xs text-slate-400 block mb-2">Kleur</label>
+          <div className="flex gap-2 flex-wrap">
+            {KLEUREN.map(k => (
+              <button key={k} onClick={()=>setKleur(k)} title={k}
+                className={`w-7 h-7 rounded-full transition-all ${KLEUR_CONFIG[k].bg} ${kleur===k?'ring-2 ring-white ring-offset-2 ring-offset-slate-800 scale-110':'hover:scale-105'}`} />
+            ))}
+          </div>
+        </div>
+
+        <div className="flex gap-2 pt-1">
+          <button onClick={onSluit} className="flex-1 py-2 bg-slate-700 hover:bg-slate-600 rounded-xl text-sm font-medium transition-colors">Annuleer</button>
+          <button onClick={opslaan} disabled={!naam.trim()}
+            className="flex-1 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed rounded-xl text-sm font-medium transition-colors">
+            Opslaan
+          </button>
+        </div>
+      </div>
+    </ModalOverlay>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  AFSPRAAK OPTIES MODAL
+// ═══════════════════════════════════════════════════════════════
+
+function AfspraakOptiesModal({ afspraak, onVerwijder, onVerplaats, onSluit }) {
+  const [toonVerplaats, setToonVerplaats] = useState(false);
+  const [nieuweTijd, setNieuweTijd]       = useState(minutenNaarTijdString(afspraak.startMinuten));
+  const cfg = KLEUR_CONFIG[afspraak.kleur];
+
+  function verplaats() {
+    onVerplaats?.(clampMinuten(tijdStringNaarMinuten(nieuweTijd), afspraak.duurMinuten));
+    onSluit();
+  }
+
+  const [jr,mn,dg] = afspraak.datum.split('-').map(Number);
+
+  return (
+    <ModalOverlay onSluit={onSluit}>
+      <div className="p-5 space-y-4">
+        <div className={`flex items-start gap-3 p-3 rounded-xl ${cfg.light}`}>
+          <div className={`w-3 h-3 rounded-full mt-0.5 flex-shrink-0 ${cfg.dot}`} />
+          <div>
+            <p className="text-sm font-semibold">{afspraak.naam}</p>
+            <p className="text-xs text-slate-400 mt-0.5">
+              {dg}/{mn}/{jr} · {minutenNaarTijdString(afspraak.startMinuten)} – {minutenNaarTijdString(afspraak.startMinuten+afspraak.duurMinuten)}
+            </p>
+          </div>
+        </div>
+
+        {!toonVerplaats ? (
+          <div className="space-y-2">
+            {onVerplaats && (
+              <button onClick={()=>setToonVerplaats(true)}
+                className="w-full py-2.5 bg-slate-700 hover:bg-slate-600 rounded-xl text-sm font-medium transition-colors text-left px-4">
+                ✏️ Verplaatsen
+              </button>
+            )}
+            <button onClick={onVerwijder}
+              className="w-full py-2.5 bg-red-500/20 hover:bg-red-500/30 text-red-400 rounded-xl text-sm font-medium transition-colors">
+              🗑️ Verwijderen
+            </button>
+            <button onClick={onSluit}
+              className="w-full py-2.5 bg-slate-800 hover:bg-slate-700 rounded-xl text-sm font-medium transition-colors text-slate-400">
+              Sluiten
+            </button>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            <div>
+              <label className="text-xs text-slate-400 block mb-1">Nieuwe starttijd</label>
+              <input type="time" value={nieuweTijd} onChange={e=>setNieuweTijd(e.target.value)}
+                className="w-full bg-slate-700 text-white text-sm rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-indigo-500" />
+            </div>
+            <div className="flex gap-2">
+              <button onClick={()=>setToonVerplaats(false)} className="flex-1 py-2 bg-slate-700 hover:bg-slate-600 rounded-xl text-sm font-medium transition-colors">Terug</button>
+              <button onClick={verplaats} className="flex-1 py-2 bg-indigo-600 hover:bg-indigo-700 rounded-xl text-sm font-medium transition-colors">Verplaatsen</button>
+            </div>
+          </div>
+        )}
+      </div>
+    </ModalOverlay>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  AFSPRAAK BLOK
+// ═══════════════════════════════════════════════════════════════
+
+function AfspraakBlok({ afspraak, onClick, onDragStart }) {
+  const top     = minutenNaarTop(afspraak.startMinuten);
+  const hoogte  = Math.max(duurNaarHoogte(afspraak.duurMinuten), 18);
+  const cfg     = KLEUR_CONFIG[afspraak.kleur];
+  const compact = hoogte < 36;
+
+  return (
+    <div
+      data-afspraak={afspraak.id}
+      draggable={!!onDragStart}
+      onClick={e=>{ e.stopPropagation(); onClick(); }}
+      onDragStart={e=>{ e.stopPropagation(); onDragStart?.(afspraak.id); e.dataTransfer.effectAllowed='move'; e.dataTransfer.setData('text/plain',afspraak.id); }}
+      className={`absolute left-0.5 right-0.5 rounded ${cfg.bg} ${cfg.text} cursor-pointer select-none overflow-hidden z-10 border-l-2 ${cfg.border} shadow-sm hover:brightness-110 transition-all active:scale-95`}
+      style={{ top, height: hoogte }}
+    >
+      {compact ? (
+        <p className="text-[10px] font-medium px-1 truncate leading-[18px]">{afspraak.naam}</p>
+      ) : (
+        <div className="px-1.5 py-0.5">
+          <p className="text-xs font-semibold truncate leading-tight">{afspraak.naam}</p>
+          <p className="text-[10px] opacity-80 leading-tight">
+            {minutenNaarTijdString(afspraak.startMinuten)} – {minutenNaarTijdString(afspraak.startMinuten+afspraak.duurMinuten)}
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  DAG KOLOM
+// ═══════════════════════════════════════════════════════════════
+
+function DagKolom({ datum, vandaag, afspraken, onSlotKlik, onAfspraakKlik, onDrop, onAfspraakDragStart }) {
+  const ref = useRef(null);
+
+  function yNaarMinuten(clientY) {
+    const y = clientY - ref.current.getBoundingClientRect().top;
+    return clampMinuten(topNaarMinuten(y), 30);
+  }
+
+  const nu        = new Date();
+  const nuMin     = nu.getHours()*60 + nu.getMinutes();
+  const toonNuLijn = vandaag && nuMin >= START_UUR*60 && nuMin <= EIND_UUR*60;
+
+  return (
+    <div
+      ref={ref}
+      className="flex-1 relative border-l border-slate-700/60 cursor-pointer min-w-0"
+      style={{ height: TOTAAL_HOOGTE }}
+      onClick={e=>{ if(e.target.closest('[data-afspraak]')) return; onSlotKlik(datum, yNaarMinuten(e.clientY)); }}
+      onDragOver={e=>{ e.preventDefault(); e.dataTransfer.dropEffect='move'; }}
+      onDrop={e=>{ e.preventDefault(); onDrop?.(datum, yNaarMinuten(e.clientY)); }}
+    >
+      {/* Uurlijnen */}
+      {UUR_LABELS.map(u => (
+        <div key={u} className="absolute left-0 right-0 border-t border-slate-700/60 pointer-events-none" style={{top:(u-START_UUR)*PX_PER_UUR}} />
+      ))}
+      {/* Kwartierlijnen */}
+      {UUR_LABELS.slice(0,-1).map(u => [1,2,3].map(k => (
+        <div key={`${u}-${k}`} className="absolute left-0 right-0 border-t border-slate-800/60 pointer-events-none" style={{top:(u-START_UUR)*PX_PER_UUR + k*16}} />
+      )))}
+      {/* Nu-lijn */}
+      {toonNuLijn && (
+        <div className="absolute left-0 right-0 z-20 pointer-events-none" style={{top:minutenNaarTop(nuMin)}}>
+          <div className="absolute -left-1 w-2 h-2 bg-red-500 rounded-full -translate-y-1/2" />
+          <div className="border-t-2 border-red-500" />
+        </div>
+      )}
+      {/* Afspraken */}
+      {afspraken.map(a => (
+        <AfspraakBlok key={a.id} afspraak={a} onClick={()=>onAfspraakKlik(a)} onDragStart={onAfspraakDragStart} />
+      ))}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  WEEK KALENDER (desktop)
+// ═══════════════════════════════════════════════════════════════
+
+function WeekKalender({ maandag, afspraken, onSlotKlik, onAfspraakKlik, onDrop, onAfspraakDragStart }) {
+  const dagen = getWeekDagen(maandag);
+  return (
+    <div className="flex-1 overflow-hidden flex flex-col min-h-0">
+      {/* Dag-headers */}
+      <div className="flex flex-shrink-0 border-b border-slate-700 bg-slate-900">
+        <div className="w-12 flex-shrink-0" />
+        {dagen.map(dag => {
+          const vd = isVandaag(dag);
+          return (
+            <div key={dag.toISOString()} className="flex-1 py-2 text-center border-l border-slate-700/60 min-w-0">
+              <div className={`text-xs font-medium ${vd?'text-indigo-400':'text-slate-500'}`}>{dagNaamKort(dag)}</div>
+              <div className={`text-sm font-bold mx-auto mt-0.5 w-7 h-7 flex items-center justify-center rounded-full ${vd?'bg-indigo-600 text-white':'text-slate-300'}`}>
+                {dagNummer(dag)}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      {/* Scrollbaar lichaam */}
+      <div className="flex-1 overflow-y-auto">
+        <div className="flex" style={{height:TOTAAL_HOOGTE}}>
+          {/* Tijdas */}
+          <div className="w-12 flex-shrink-0 relative select-none">
+            {UUR_LABELS.map(u => (
+              <div key={u} className="absolute right-2 text-[10px] text-slate-600 tabular-nums" style={{top:(u-START_UUR)*PX_PER_UUR-7}}>
+                {u}:00
+              </div>
+            ))}
+          </div>
+          {/* Dag-kolommen */}
+          {dagen.map(dag => {
+            const ds = datumNaarString(dag);
+            return (
+              <DagKolom
+                key={ds} datum={ds} vandaag={isVandaag(dag)}
+                afspraken={afspraken.filter(a=>a.datum===ds)}
+                onSlotKlik={onSlotKlik} onAfspraakKlik={onAfspraakKlik}
+                onDrop={onDrop} onAfspraakDragStart={onAfspraakDragStart}
+              />
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  MOBIELE KALENDER
+// ═══════════════════════════════════════════════════════════════
+
+function MobieleKalender({ dag, afspraken, pendingActiviteit, onSlotKlik, onAfspraakKlik, onVorigeDag, onVolgendeDag }) {
+  const touchX = useRef(0);
+  const touchY = useRef(0);
+  const datum  = datumNaarString(dag);
+  const cfg    = pendingActiviteit ? KLEUR_CONFIG[pendingActiviteit.kleur] : null;
+
+  return (
+    <div className="flex flex-col h-full overflow-hidden">
+      {pendingActiviteit && (
+        <div className={`flex-shrink-0 flex items-center gap-2 px-4 py-2 text-sm font-medium ${cfg.bg} ${cfg.text}`}>
+          <span>Tik op een tijdslot om</span>
+          <span className="font-bold">{pendingActiviteit.naam}</span>
+          <span>in te plannen</span>
+        </div>
+      )}
+      <div className="flex-1 overflow-y-auto overflow-x-hidden"
+        onTouchStart={e=>{ touchX.current=e.touches[0].clientX; touchY.current=e.touches[0].clientY; }}
+        onTouchEnd={e=>{
+          const dx = e.changedTouches[0].clientX - touchX.current;
+          const dy = Math.abs(e.changedTouches[0].clientY - touchY.current);
+          if (Math.abs(dx)>50 && Math.abs(dx)>dy) { dx<0 ? onVolgendeDag() : onVorigeDag(); }
+        }}
+      >
+        <div className="flex" style={{height:TOTAAL_HOOGTE}}>
+          <div className="w-12 flex-shrink-0 relative select-none">
+            {UUR_LABELS.map(u => (
+              <div key={u} className="absolute right-2 text-[10px] text-slate-600 tabular-nums" style={{top:(u-START_UUR)*PX_PER_UUR-7}}>
+                {u}:00
+              </div>
+            ))}
+          </div>
+          <DagKolom datum={datum} vandaag={isVandaag(dag)} afspraken={afspraken} onSlotKlik={onSlotKlik} onAfspraakKlik={onAfspraakKlik} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  ACTIVITEITEN LIJST
+// ═══════════════════════════════════════════════════════════════
+
+function ActiviteitenLijst({ activiteiten, onNieuwe, onVerwijder, onDragStart, pendingId, onSelecteer, isMobiel }) {
+  return (
+    <div className="flex flex-col h-full">
+      <div className="flex items-center justify-between px-3 py-3 border-b border-slate-700 flex-shrink-0">
+        <h2 className="text-sm font-semibold text-slate-300">Activiteiten</h2>
+        <button onClick={onNieuwe} className="text-xs px-2 py-1 bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-colors font-medium">+ Nieuw</button>
+      </div>
+      <div className="flex-1 overflow-y-auto p-2 space-y-1.5">
+        {activiteiten.length === 0 ? (
+          <p className="text-xs text-slate-600 text-center py-6">Nog geen activiteiten.<br />Klik op "+ Nieuw" om te beginnen.</p>
+        ) : activiteiten.map(act => {
+          const cfg       = KLEUR_CONFIG[act.kleur];
+          const isPending = pendingId === act.id;
+          return (
+            <div key={act.id}
+              draggable={!isMobiel}
+              onDragStart={!isMobiel ? e=>{ e.dataTransfer.effectAllowed='copy'; e.dataTransfer.setData('text/plain',act.id); onDragStart?.('vasteActiviteit',act.id); } : undefined}
+              onClick={isMobiel ? ()=>onSelecteer?.(act) : undefined}
+              className={`flex items-center gap-2 px-2 py-2 rounded-lg transition-all ${isMobiel?'cursor-pointer':'cursor-grab active:cursor-grabbing'} ${isPending?`${cfg.bg} ${cfg.text} ring-2 ring-white`:'bg-slate-800 hover:bg-slate-700 text-slate-300'}`}
+            >
+              <div className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${cfg.dot}`} />
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-medium truncate">{act.naam}</p>
+                <p className={`text-[10px] ${isPending?'opacity-70':'text-slate-500'}`}>{act.duurMinuten} min</p>
+              </div>
+              <button onClick={e=>{ e.stopPropagation(); onVerwijder(act.id); }}
+                className={`transition-colors text-sm p-1 rounded ${isPending?'opacity-70':'text-slate-600 hover:text-red-400'}`}
+                title="Verwijder">×</button>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  SIDEBAR (desktop)
+// ═══════════════════════════════════════════════════════════════
+
+function Sidebar({ activiteiten, onNieuwe, onDragStart, onVerwijder }) {
+  return (
+    <aside className="w-[200px] flex-shrink-0 border-r border-slate-700 flex flex-col overflow-hidden bg-slate-900">
+      <ActiviteitenLijst activiteiten={activiteiten} onNieuwe={onNieuwe} onVerwijder={onVerwijder} onDragStart={onDragStart} />
+    </aside>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  TOP BALK
+// ═══════════════════════════════════════════════════════════════
+
+function TopBalk({ maandag, onVorige, onVolgende, mobieleDag, onNavigeer }) {
+  return (
+    <div className="flex-shrink-0 flex items-center justify-between px-3 py-2 border-b border-slate-700 bg-slate-900 h-14">
+      <div className="flex items-center gap-1">
+        <button onClick={onVorige} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-slate-700 transition-colors text-slate-400 hover:text-white text-lg" aria-label="Vorige">‹</button>
+        <button onClick={onVolgende} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-slate-700 transition-colors text-slate-400 hover:text-white text-lg" aria-label="Volgende">›</button>
+      </div>
+      <div className="flex flex-col items-center">
+        {mobieleDag ? (
+          <>
+            <span className={`text-base font-semibold ${isVandaag(mobieleDag)?'text-indigo-400':'text-white'}`}>
+              {dagNaamKort(mobieleDag)} {mobieleDag.getDate()}
+            </span>
+            <span className="text-xs text-slate-500">week {weeknummer(maandag)}</span>
+          </>
+        ) : (
+          <>
+            <span className="text-sm font-semibold text-white hidden sm:block">{weekLabel(maandag)}</span>
+            <span className="text-sm font-semibold text-white sm:hidden">Week {weeknummer(maandag)}</span>
+          </>
+        )}
+      </div>
+      <button onClick={()=>onNavigeer('volgende-week')}
+        className="text-xs px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 rounded-lg font-medium transition-colors whitespace-nowrap">
+        <span className="hidden sm:inline">Plan volgende week</span>
+        <span className="sm:hidden">Plannen</span>
+      </button>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  TEMPLATES LIJST (mobiele tab)
+// ═══════════════════════════════════════════════════════════════
+
+function TemplatesLijst({ onNavigeer }) {
+  return (
+    <div className="flex flex-col items-center justify-center h-full p-8 text-center gap-4">
+      <div className="w-14 h-14 bg-slate-800 rounded-2xl flex items-center justify-center text-3xl">🗂️</div>
+      <div>
+        <h2 className="text-base font-semibold text-slate-300">Dagtemplates</h2>
+        <p className="text-xs text-slate-500 mt-1">Sla typische dagindelingen op en gebruik ze bij het plannen.</p>
+      </div>
+      <button onClick={()=>onNavigeer('templates')}
+        className="text-xs px-4 py-2 bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-colors font-medium">
+        Beheer templates
+      </button>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  BOTTOM NAV (mobiel)
+// ═══════════════════════════════════════════════════════════════
+
+const TABS = [
+  { id:'kalender',      label:'Kalender',     icon:'📅' },
+  { id:'activiteiten',  label:'Activiteiten',  icon:'🎯' },
+  { id:'templates',     label:'Templates',     icon:'🗂️' },
+];
+
+function BottomNav({ activeTab, onTabChange }) {
+  return (
+    <nav className="flex-shrink-0 flex border-t border-slate-700 bg-slate-900 pb-safe">
+      {TABS.map(tab => (
+        <button key={tab.id} onClick={()=>onTabChange(tab.id)}
+          className={`flex-1 flex flex-col items-center justify-center py-2 gap-0.5 transition-colors ${activeTab===tab.id?'text-indigo-400':'text-slate-500 hover:text-slate-300'}`}>
+          <span className="text-xl leading-none">{tab.icon}</span>
+          <span className="text-[10px] font-medium">{tab.label}</span>
+        </button>
+      ))}
+    </nav>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  PLACEHOLDER PAGINA'S
+// ═══════════════════════════════════════════════════════════════
+
+function VolgendeWeekPagina({ onTerug }) {
+  return (
+    <div className="min-h-screen bg-slate-900 text-white flex flex-col items-center justify-center p-8">
+      <div className="max-w-md w-full text-center space-y-6">
+        <div className="w-16 h-16 bg-indigo-600 rounded-2xl flex items-center justify-center mx-auto text-3xl">📅</div>
+        <h1 className="text-2xl font-bold">Plan volgende week</h1>
+        <p className="text-slate-400">
+          Hier kun je de volgende week plannen met behulp van dagtemplates.
+          Selecteer een template per dag en pas aan naar wens.
+          <br /><br />
+          <span className="text-indigo-400 font-medium">Binnenkort beschikbaar.</span>
+        </p>
+        <button onClick={onTerug} className="px-6 py-3 bg-indigo-600 hover:bg-indigo-700 rounded-xl font-medium transition-colors">
+          ← Terug naar kalender
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function TemplatesPagina({ onTerug }) {
+  return (
+    <div className="min-h-screen bg-slate-900 text-white flex flex-col items-center justify-center p-8">
+      <div className="max-w-md w-full text-center space-y-6">
+        <div className="w-16 h-16 bg-indigo-600 rounded-2xl flex items-center justify-center mx-auto text-3xl">🗂️</div>
+        <h1 className="text-2xl font-bold">Dagtemplates</h1>
+        <p className="text-slate-400">
+          Maak herbruikbare dagindelingen. Sla een typische werkdag, sportdag
+          of rustige dag op als template en gebruik die bij het plannen van je week.
+          <br /><br />
+          <span className="text-indigo-400 font-medium">Binnenkort beschikbaar.</span>
+        </p>
+        <button onClick={onTerug} className="px-6 py-3 bg-indigo-600 hover:bg-indigo-700 rounded-xl font-medium transition-colors">
+          ← Terug naar kalender
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  PLANR APP (hoofd-scherm)
+// ═══════════════════════════════════════════════════════════════
+
+function PlanrApp({ onNavigeer }) {
+  const store = usePlanrStore();
+
+  const [huidigeDatum,      setHuidigeDatum]      = useState(() => new Date());
+  const [mobieleTab,        setMobieleTab]         = useState('kalender');
+  const [mobieleDag,        setMobieleDag]         = useState(() => new Date());
+
+  const [toontNieuweAct,    setToontNieuweAct]     = useState(false);
+  const [nieuweAfspraak,    setNieuweAfspraak]      = useState(null);   // { datum, startMinuten }
+  const [gesAfspraak,       setGesAfspraak]         = useState(null);   // Afspraak
+
+  const [pendingAct,        setPendingAct]          = useState(null);   // VasteActiviteit
+  const [dragAfspraakId,    setDragAfspraakId]      = useState(null);
+  const [dragActId,         setDragActId]           = useState(null);
+
+  const maandag = getMaandag(huidigeDatum);
+
+  function slotKlik(datum, startMin) {
+    if (pendingAct) {
+      store.addAfspraak({ naam:pendingAct.naam, kleur:pendingAct.kleur, datum, startMinuten:clampMinuten(startMin,pendingAct.duurMinuten), duurMinuten:pendingAct.duurMinuten, vasteActiviteitId:pendingAct.id });
+      setPendingAct(null);
+      return;
+    }
+    setNieuweAfspraak({ datum, startMinuten: startMin });
+  }
+
+  function drop(datum, startMin) {
+    if (dragActId) {
+      const act = store.activiteiten.find(a=>a.id===dragActId);
+      if (act) store.addAfspraak({ naam:act.naam, kleur:act.kleur, datum, startMinuten:clampMinuten(startMin,act.duurMinuten), duurMinuten:act.duurMinuten, vasteActiviteitId:act.id });
+      setDragActId(null);
+    } else if (dragAfspraakId) {
+      const af = store.afspraken.find(a=>a.id===dragAfspraakId);
+      if (af) store.updateAfspraak(dragAfspraakId, { datum, startMinuten:clampMinuten(startMin,af.duurMinuten) });
+      setDragAfspraakId(null);
+    }
+  }
+
+  return (
+    <div className="flex h-screen overflow-hidden bg-slate-900 text-white">
+
+      {/* ── DESKTOP (md+) ── */}
+      <div className="hidden md:flex h-full w-full">
+        <Sidebar
+          activiteiten={store.activiteiten}
+          onNieuwe={()=>setToontNieuweAct(true)}
+          onDragStart={(type,id)=>{ if(type==='vasteActiviteit') setDragActId(id); }}
+          onVerwijder={store.removeActiviteit}
+        />
+        <div className="flex-1 flex flex-col overflow-hidden min-w-0">
+          <TopBalk maandag={maandag} onVorige={()=>setHuidigeDatum(d=>voegDagenToe(d,-7))} onVolgende={()=>setHuidigeDatum(d=>voegDagenToe(d,7))} onNavigeer={onNavigeer} />
+          <WeekKalender
+            maandag={maandag} afspraken={store.afspraken}
+            onSlotKlik={slotKlik} onAfspraakKlik={setGesAfspraak}
+            onDrop={drop} onAfspraakDragStart={setDragAfspraakId}
+          />
+        </div>
+      </div>
+
+      {/* ── MOBIEL (<md) ── */}
+      <div className="flex md:hidden flex-col h-full w-full">
+        {mobieleTab === 'kalender' && (
+          <TopBalk maandag={maandag} onVorige={()=>setHuidigeDatum(d=>voegDagenToe(d,-7))} onVolgende={()=>setHuidigeDatum(d=>voegDagenToe(d,7))} mobieleDag={mobieleDag} onNavigeer={onNavigeer} />
+        )}
+        <div className="flex-1 min-h-0 overflow-hidden">
+          {mobieleTab === 'kalender' && (
+            <MobieleKalender
+              dag={mobieleDag}
+              afspraken={store.afspraken.filter(a=>a.datum===datumNaarString(mobieleDag))}
+              pendingActiviteit={pendingAct}
+              onSlotKlik={slotKlik} onAfspraakKlik={setGesAfspraak}
+              onVorigeDag={()=>setMobieleDag(d=>voegDagenToe(d,-1))}
+              onVolgendeDag={()=>setMobieleDag(d=>voegDagenToe(d,1))}
+            />
+          )}
+          {mobieleTab === 'activiteiten' && (
+            <ActiviteitenLijst
+              activiteiten={store.activiteiten}
+              onNieuwe={()=>setToontNieuweAct(true)}
+              onVerwijder={store.removeActiviteit}
+              pendingId={pendingAct?.id}
+              onSelecteer={act=>{
+                setPendingAct(prev=>prev?.id===act.id?null:act);
+                if (pendingAct?.id !== act.id) setMobieleTab('kalender');
+              }}
+              isMobiel
+            />
+          )}
+          {mobieleTab === 'templates' && <TemplatesLijst onNavigeer={onNavigeer} />}
+        </div>
+        <BottomNav activeTab={mobieleTab} onTabChange={setMobieleTab} />
+      </div>
+
+      {/* ── MODALS ── */}
+      {toontNieuweAct && (
+        <NieuweActiviteitModal onOpslaan={store.addActiviteit} onSluit={()=>setToontNieuweAct(false)} />
+      )}
+      {nieuweAfspraak && (
+        <NieuweAfspraakModal
+          datum={nieuweAfspraak.datum} startMinuten={nieuweAfspraak.startMinuten}
+          onOpslaan={store.addAfspraak} onSluit={()=>setNieuweAfspraak(null)}
+        />
+      )}
+      {gesAfspraak && (
+        <AfspraakOptiesModal
+          afspraak={gesAfspraak}
+          onVerwijder={()=>{ store.removeAfspraak(gesAfspraak.id); setGesAfspraak(null); }}
+          onVerplaats={m=>{ store.updateAfspraak(gesAfspraak.id,{startMinuten:m}); }}
+          onSluit={()=>setGesAfspraak(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  ROOT APP — simpele hash-routing + service worker
+// ═══════════════════════════════════════════════════════════════
+
+function App() {
+  const [pagina, setPagina] = useState('kalender');
+
+  useEffect(() => {
+    if ('serviceWorker' in navigator && location.protocol !== 'file:') {
+      navigator.serviceWorker.register('./sw.js').catch(()=>{});
+    }
+  }, []);
+
+  if (pagina === 'volgende-week') return <VolgendeWeekPagina onTerug={()=>setPagina('kalender')} />;
+  if (pagina === 'templates')     return <TemplatesPagina    onTerug={()=>setPagina('kalender')} />;
+  return <PlanrApp onNavigeer={setPagina} />;
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>
