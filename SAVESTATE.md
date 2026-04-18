@@ -1,11 +1,49 @@
-# Marketing Analyse App — Savestate
+# Projecten Savestate
 
 ## Laatste opslag
-**Datum:** 2026-03-28
-**Commit hash:** 9564e25
+**Datum:** 2026-04-19
+**Commit hash:** fd82b9f
 **Branch:** `main`
 **Remote:** https://github.com/christiaensdario-ui/Weekflow.git
 **Gepushed:** ja — 1 commit naar origin/main
+
+---
+
+## Samenvatting recente wijzigingen
+
+### Sessie 2026-04-19 — planr: nieuwe PWA weekplanner als pure statische webapp (commit fd82b9f)
+
+#### Nieuw project: Planr (`planr/`)
+
+Volledig nieuw project opgezet als één enkel statisch HTML-bestand. Traject van deze sessie:
+1. **Next.js 16 project** opgezet met App Router, TypeScript, Tailwind CSS
+2. **Geconverteerd naar React + Vite** (geen server nodig, `dist/` map als output)
+3. **Geconverteerd naar pure statische webapp** — één `index.html` + `manifest.json` + `sw.js`
+
+**Bestanden:**
+- `planr/index.html` — 889 regels, 46 KB. Bevat alle HTML, CSS en JS (React 18 via CDN + Babel Standalone + Tailwind Play CDN)
+- `planr/manifest.json` — PWA manifest (naam, themakleur, inline SVG-icoon)
+- `planr/sw.js` — Service worker met cache-first strategie voor offline gebruik
+
+**Features geïmplementeerd:**
+- Weekkalender met tijdslijn 6u–23u, uurlijnen + kwartierlijnen per 15 min
+- Huidige-tijd lijn op dag van vandaag (rode lijn)
+- Vaste activiteiten (naam, kleur uit 8 opties, duur in stappen van 15 min)
+- Desktop: sleepbare activiteiten vanuit sidebar naar kalender; drag & drop herplaatsen
+- Mobiel: tap-to-place flow (activiteit aantikken → tijdslot tikken)
+- Mobiel: bottom navigation bar (Kalender / Activiteiten / Templates)
+- Mobiel: links/rechts swipen om van dag te wisselen (dagweergave)
+- Modals: nieuwe activiteit, nieuwe afspraak, afspraak opties (verplaatsen / verwijderen)
+- Blokken snappen naar dichtstbijzijnde kwartier; hoogte = duur visueel (64px/uur)
+- localStorage persistentie (`planr_activiteiten`, `planr_afspraken`, `planr_templates`)
+- Placeholder-pagina's voor "Plan volgende week" en "Dagtemplates"
+- PWA installeerbaar (manifest + service worker); graceful fallback via `file://`
+
+**Tech stack:**
+- React 18 (UMD via unpkg), Tailwind Play CDN, Babel Standalone (JSX zonder buildstap)
+- Geen Node.js, geen npm, geen build tool — direct openen via dubbelklik
+
+---
 
 ---
 
@@ -278,6 +316,9 @@ Eerder in dezelfde dag: complete herstart van `WeekFlow/weekflow.html`.
 ### Bestanden
 - `marketing-analyse.html` — Enkelvoudig HTML-bestand (React + Tailwind via CDN)
 - `WeekFlow/weekflow.html` — Enkelvoudig HTML-bestand (Vanilla JS, geen framework)
+- `planr/index.html` — Enkelvoudig HTML-bestand (React 18 + Tailwind + Babel via CDN)
+- `planr/manifest.json` — PWA manifest
+- `planr/sw.js` — Service worker
 
 ### marketing-analyse.html — Features actief
 - Multi-client analyse beheer (aanmaken, opslaan, openen, verwijderen)
