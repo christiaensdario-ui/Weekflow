@@ -1,8 +1,8 @@
 # Projecten Savestate
 
 ## Laatste opslag
-**Datum:** 2026-04-19
-**Commit hash:** fd82b9f
+**Datum:** 2026-04-23
+**Commit hash:** 10f39df
 **Branch:** `main`
 **Remote:** https://github.com/christiaensdario-ui/Weekflow.git
 **Gepushed:** ja — 1 commit naar origin/main
@@ -10,6 +10,25 @@
 ---
 
 ## Samenvatting recente wijzigingen
+
+### Sessie 2026-04-23 — planr: drag & drop bugfix via useRef (commit 10f39df)
+
+#### Bug fix: drag & drop werkte niet op desktop
+- **Oorzaak**: `dragActId` en `dragAfspraakId` waren React state. `drop()` is een closure die de state vastlegt op render-moment. React batcht state-updates waardoor de waarden nog `null` waren wanneer het `drop`-event vuurt.
+- **Fix**: beide state-variabelen vervangen door `useRef`. Refs zijn synchroon en lezen altijd de actuele waarde, ook vanuit een verouderde closure.
+- **Gewijzigde code** (4 edits in `PlanrApp`):
+  1. `useState(null)` → `useRef(null)` voor `dragAfspraakIdRef` en `dragActIdRef`
+  2. `drop()` leest nu `.current` i.p.v. state
+  3. Sidebar `onDragStart` schrijft direct naar `dragActIdRef.current`
+  4. `WeekKalender` `onAfspraakDragStart` schrijft naar `dragAfspraakIdRef.current`
+
+#### Lopende todo (nog te fixen)
+- Probleem 2: dagtemplate aanmaken flow (new template → direct naar editor)
+- Probleem 3: Plan volgende week → losse afspraak per dag prominenter
+- Probleem 4: geel vierkantje (🗂️ emoji in dagkopteksten) verwijderen
+- Probleem 5: volledig licht kleurpallet (#F5F5F5 achtergrond, #2C2C2C accent)
+
+---
 
 ### Sessie 2026-04-19 — planr: nieuwe PWA weekplanner als pure statische webapp (commit fd82b9f)
 
