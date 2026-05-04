@@ -1,8 +1,8 @@
 # Projecten Savestate
 
 ## Laatste opslag
-**Datum:** 2026-04-23
-**Commit hash:** 10f39df
+**Datum:** 2026-05-05
+**Commit hash:** f419f20
 **Branch:** `main`
 **Remote:** https://github.com/christiaensdario-ui/Weekflow.git
 **Gepushed:** ja — 1 commit naar origin/main
@@ -10,6 +10,26 @@
 ---
 
 ## Samenvatting recente wijzigingen
+
+### Sessie 2026-05-05 — planr: dagtemplate aanmaken gaat direct naar editor (commit f419f20)
+
+#### Feature fix: "Nieuwe template" opent direct de editor
+- **Probleem**: Na aanmaken van een nieuwe template via `NieuwTemplateModal` navigeerde de app naar de templates-lijst. De gebruiker moest nog handmatig "Bewerken" klikken.
+- **Oplossing**: Pre-generated id aanmaken vóór `store.addTemplate()`. Daarmee kan `setBewerkId(newId)` of `tplEditorId` direct worden gezet zonder te wachten op async state-update.
+- **Gewijzigde onderdelen** (6 edits in `planr/index.html`):
+  1. `usePlanrStore.addTemplate` — `{id:genId(), ...d}` (id eerst zodat meegeleverd id wint)
+  2. `TemplatesPagina` — accepteert `openBewerkId` prop, initialiseert `bewerkId` state ermee
+  3. `TemplatesPagina` interne NieuwTemplateModal — genereert id lokaal, roept `setBewerkId(newId)` aan
+  4. `PlanrApp` — accepteert `onNieuwTpl` prop
+  5. `PlanrApp` NieuwTemplateModal — genereert id lokaal, roept `onNieuwTpl(newId)` aan i.p.v. `onNavigeer('templates')`
+  6. `App` — `tplEditorId` state, doorgeven aan `TemplatesPagina` als `openBewerkId`, reset bij terugkeer
+
+#### Lopende todo (nog te fixen)
+- Probleem 3: Plan volgende week → losse afspraak per dag prominenter
+- Probleem 4: geel vierkantje (🗂️ emoji in dagkopteksten) verwijderen
+- Probleem 5: volledig licht kleurpallet (#F5F5F5 achtergrond, #2C2C2C accent)
+
+---
 
 ### Sessie 2026-04-23 — planr: drag & drop bugfix via useRef (commit 10f39df)
 
@@ -21,12 +41,6 @@
   2. `drop()` leest nu `.current` i.p.v. state
   3. Sidebar `onDragStart` schrijft direct naar `dragActIdRef.current`
   4. `WeekKalender` `onAfspraakDragStart` schrijft naar `dragAfspraakIdRef.current`
-
-#### Lopende todo (nog te fixen)
-- Probleem 2: dagtemplate aanmaken flow (new template → direct naar editor)
-- Probleem 3: Plan volgende week → losse afspraak per dag prominenter
-- Probleem 4: geel vierkantje (🗂️ emoji in dagkopteksten) verwijderen
-- Probleem 5: volledig licht kleurpallet (#F5F5F5 achtergrond, #2C2C2C accent)
 
 ---
 
