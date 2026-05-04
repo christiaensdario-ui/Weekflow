@@ -211,7 +211,7 @@ function usePlanrStore() {
   const addAfspraak      = useCallback(d => setAfspraken(p => [...p, {...d, id:genId()}]), []);
   const updateAfspraak   = useCallback((id,u) => setAfspraken(p => p.map(a => a.id===id?{...a,...u}:a)), []);
   const removeAfspraak   = useCallback(id => setAfspraken(p => p.filter(a => a.id!==id)), []);
-  const addTemplate      = useCallback(d => setTemplates(p => [...p, {...d, id:genId()}]), []);
+  const addTemplate      = useCallback(d => setTemplates(p => [...p, {id:genId(), ...d}]), []);
   const updateTemplate   = useCallback((id,u) => setTemplates(p => p.map(t => t.id===id?{...t,...u}:t)), []);
   const removeTemplate   = useCallback(id => setTemplates(p => p.filter(t => t.id!==id)), []);
 
@@ -1224,8 +1224,8 @@ function TemplateToepassenModal({ datum, templates, bestaandeAfspraken, onToepas
   );
 }
 
-function TemplatesPagina({ templates, activiteiten, onToevoegen, onBijwerken, onVerwijderen, onTerug }) {
-  const [bewerkId,   setBewerkId]   = useState(null);
+function TemplatesPagina({ templates, activiteiten, onToevoegen, onBijwerken, onVerwijderen, onTerug, openBewerkId = null }) {
+  const [bewerkId,   setBewerkId]   = useState(openBewerkId);
   const [toontNieuw, setToontNieuw] = useState(false);
 
   const geselecteerd = templates.find(t => t.id === bewerkId);
@@ -1286,7 +1286,7 @@ function TemplatesPagina({ templates, activiteiten, onToevoegen, onBijwerken, on
       </div>
       {toontNieuw && (
         <NieuwTemplateModal
-          onOpslaan={d=>{ onToevoegen(d); setToontNieuw(false); setBewerkId(null); }}
+          onOpslaan={d=>{ const newId = genId(); onToevoegen({...d, id: newId}); setToontNieuw(false); setBewerkId(newId); }}
           onSluit={()=>setToontNieuw(false)}
         />
       )}
@@ -1791,7 +1791,7 @@ function Onboarding({ onVoltooid }) {
 //  PLANR APP (hoofd-scherm)
 // ═══════════════════════════════════════════════════════════════
 
-function PlanrApp({ store, onNavigeer, initialDatum, onHerstartOnboarding }) {
+function PlanrApp({ store, onNavigeer, initialDatum, onHerstartOnboarding, onNieuwTpl }) {
 
   const [huidigeDatum,       setHuidigeDatum]       = useState(() => initialDatum ?? new Date());
   const [mobieleTab,         setMobieleTab]          = useState('kalender');
@@ -1921,7 +1921,7 @@ function PlanrApp({ store, onNavigeer, initialDatum, onHerstartOnboarding }) {
       )}
       {toontNieuweTpl && (
         <NieuwTemplateModal
-          onOpslaan={d=>{ store.addTemplate(d); setToontNieuweTpl(false); onNavigeer('templates'); }}
+          onOpslaan={d=>{ const newId = genId(); store.addTemplate({...d, id: newId}); setToontNieuweTpl(false); onNieuwTpl(newId); }}
           onSluit={()=>setToontNieuweTpl(false)}
         />
       )}
@@ -1960,6 +1960,7 @@ function App() {
   const [pagina,         setPagina]         = useState('kalender');
   const [planrKey,       setPlanrKey]       = useState('default');
   const [startDatum,     setStartDatum]     = useState(null);
+  const [tplEditorId,    setTplEditorId]    = useState(null);
   const [toonOnboarding, setToonOnboarding] = useState(() => {
     try { return !localStorage.getItem('planr_onboarding_done'); } catch { return false; }
   });
@@ -1998,11 +1999,14 @@ function App() {
         onToevoegen={store.addTemplate}
         onBijwerken={store.updateTemplate}
         onVerwijderen={store.removeTemplate}
-        onTerug={()=>setPagina('kalender')}
+        onTerug={()=>{ setTplEditorId(null); setPagina('kalender'); }}
+        openBewerkId={tplEditorId}
       />
     );
   } else {
-    inhoud = <PlanrApp key={planrKey} store={store} onNavigeer={setPagina} initialDatum={startDatum} onHerstartOnboarding={()=>setToonOnboarding(true)} />;
+    inhoud = <PlanrApp key={planrKey} store={store} onNavigeer={setPagina} initialDatum={startDatum} onHerstartOnboarding={()=>setToonOnboarding(true)}
+      onNieuwTpl={id=>{ setTplEditorId(id); setPagina('templates'); }}
+    />;
   }
 
   return (
